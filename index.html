@@ -1,33 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>My Website!</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gravity Flip</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-    <h1>Welcome to my ICSpark Final Project Website!</h1>
-    
-    <p>
-        Before you begin working on your final project, take the time to try and think of what you want your final project to be! 
-        This website should be something you're proud of since you'll show it off to your friends and family at the end of the program!
-    </p>
-    
-    <p>
-        This website can be whatever you want, as long as you can make it! Make sure that your idea isn't too big and difficult, but not too small and short either! 
-        If you can't come up with a final website idea, here are a few ideas:
-    </p>
-    
-    <ul>
-        <li><strong>A Personality Quiz</strong> – Make a personality quiz out of your favorite game or show! Use JavaScript to ask questions and decide on what the quiz taker's character is!</li>
-        <li><strong>A Cookie Clicker Game</strong> – Clicking on a picture increases your score, and you can make upgrades to increase your score further! It doesn't have to be a cookie, either! It can be whatever you want, it's your website!</li>
-        <li><strong>Advanced Mad Libs Creator</strong> – If you liked the Mad Libs project from Week 5, you can build onto it by adding more and more scenarios!</li>
-        <li><strong>Wiki</strong> – If you have a favorite game or show you want to make your own wiki about, make it! You can have multiple pages on your website.</li>
-        <li><strong>Choose Your Own Adventure Game</strong> – The website gives the user a scenario and a choice, and each choice will lead them down a new path in a story of your creation!</li>
-        <li><strong>Flashcard Study Website</strong> – Want to test your friends, or help them study for something? Make a website that has interactable flashcards that give the answer when clicked!</li>
-        <li><strong>Trivia Game</strong> – If you have tricky trivia questions to ask about a TV series, a game, or even about yourself, make a trivia website for others to tackle!</li>
-        <li><strong>Whatever You Want!</strong> – It's your website! As long as you believe you can finish it in a couple of weeks, go for it! Your mentors will be there to help you if you ever get stuck!</li>
-    </ul>
 
-    <script src="script.js"></script>
+  <!-- START -->
+  <div id="screen-start" class="screen active">
+    <img class="bg-img" src="https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1000&auto=format&fit=crop&q=70" alt="" />
+    <div class="start-content">
+      <img class="astronaut" src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Astronaut_cartoon.svg/160px-Astronaut_cartoon.svg.png" alt="astronaut" />
+      <h1>VOID<br><em>DRIFT</em></h1>
+      <p class="tagline">Collect orbs. Avoid the walls.</p>
+      <div class="card">
+        <div class="how-rows">
+          <div>⬆⬇⬅➡ Arrow keys or WASD to move</div>
+          <div>✦ Touch D-pad on mobile</div>
+          <div>✖ Touch the closing walls = game over</div>
+        </div>
+        <div class="hi-line">BEST &nbsp;<span id="hi-start">0</span></div>
+        <button id="btn-start">PLAY</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME -->
+  <div id="screen-game" class="screen">
+    <div id="hud">
+      <div class="hcell"><span class="hlbl">SCORE</span><span id="score" class="hval">0</span></div>
+      <div class="hcell mid"><span class="hlbl">MISSES</span><span id="misses" class="hval">● ● ●</span></div>
+      <div class="hcell right"><span class="hlbl">COMBO</span><span id="combo" class="hval">×1</span></div>
+    </div>
+    <canvas id="canvas"></canvas>
+    <div id="dpad">
+      <div class="dpad-row"><button id="d-up">▲</button></div>
+      <div class="dpad-row">
+        <button id="d-left">◀</button>
+        <button id="d-down">▼</button>
+        <button id="d-right">▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="screen-over" class="screen">
+    <img class="bg-img" src="https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1000&auto=format&fit=crop&q=70" alt="" />
+    <div class="over-content">
+      <h2>COLLAPSED</h2>
+      <div class="over-stats">
+        <div class="ostat"><span class="olbl">Score</span><span id="o-score" class="oval">0</span></div>
+        <div class="ostat"><span class="olbl">Orbs</span><span id="o-orbs" class="oval">0</span></div>
+        <div class="ostat"><span class="olbl">Best Combo</span><span id="o-combo" class="oval">×1</span></div>
+      </div>
+      <div id="o-newhi" class="newhi hidden">★ NEW BEST ★</div>
+      <button id="btn-retry">PLAY AGAIN</button>
+      <button id="btn-menu" class="ghost">MENU</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
 </body>
+</html>
