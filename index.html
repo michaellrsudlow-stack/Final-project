@@ -1,68 +1,149 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gravity Flip</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Meteor Blaster</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
 </head>
 <body>
 
-  <!-- START -->
-  <div id="screen-start" class="screen active">
-    <img class="bg-img" src="https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1000&auto=format&fit=crop&q=70" alt="" />
-    <div class="start-content">
-      <img class="astronaut" src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Astronaut_cartoon.svg/160px-Astronaut_cartoon.svg.png" alt="astronaut" />
-      <h1>VOID<br><em>DRIFT</em></h1>
-      <p class="tagline">Collect orbs. Avoid the walls.</p>
-      <div class="card">
-        <div class="how-rows">
-          <div>⬆⬇⬅➡ Arrow keys or WASD to move</div>
-          <div>✦ Touch D-pad on mobile</div>
-          <div>✖ Touch the closing walls = game over</div>
-        </div>
-        <div class="hi-line">BEST &nbsp;<span id="hi-start">0</span></div>
-        <button id="btn-start">PLAY</button>
-      </div>
+<!-- ═══ SCREENS ═══ -->
+<div id="startScreen" class="screen hidden">
+  <div class="star-canvas"></div>
+  <div class="sc">
+    <div class="title-eyebrow">★ EARTH DEFENSE FORCE ★</div>
+    <h1 class="game-title">METEOR<br><span>BLASTER</span></h1>
+    <div class="menu-btns">
+      <button class="btn-primary" id="startBtn">LAUNCH MISSION</button>
+      <button class="btn-secondary" id="lbBtn">🏆 LEADERBOARD</button>
+      <button class="btn-secondary" id="settingsBtn">⚙ SETTINGS</button>
+    </div>
+    <div class="powerup-legend">
+      <span class="pl-item rapid">⚡ Rapid Fire</span>
+      <span class="pl-item triple">✦ Triple Shot</span>
+      <span class="pl-item shield">🛡 Shield</span>
+      <span class="pl-item bomb">💥 Bomb</span>
+    </div>
+    <div class="controls-hint"><kbd>← →</kbd> Move &nbsp;|&nbsp; <kbd>Space</kbd> Shoot &nbsp;|&nbsp; <kbd>Esc</kbd> Pause</div>
+  </div>
+</div>
+
+<div id="leaderboardScreen" class="screen hidden">
+  <div class="star-canvas"></div>
+  <div class="sc">
+    <h2 class="screen-title">🏆 LEADERBOARD</h2>
+    <div id="lbStatus" class="lb-status"></div>
+    <div id="lbList" class="lb-list"></div>
+    <button class="btn-secondary" id="lbBackBtn">← BACK</button>
+  </div>
+</div>
+
+<div id="settingsScreen" class="screen hidden">
+  <div class="star-canvas"></div>
+  <div class="sc">
+    <h2 class="screen-title">⚙ SETTINGS</h2>
+    <div class="settings-list">
+      <div class="s-row"><span>Music</span><button class="toggle" id="musicToggle">ON</button></div>
+      <div class="s-row"><span>Sound Effects</span><button class="toggle" id="sfxToggle">ON</button></div>
+      <div class="s-row"><span>Music</span><button class="toggle" id="musicToggle">ON</button></div>
+      <div class="s-row"><span>Music Volume</span><input type="range" id="volSlider" class="vol-slider" min="0" max="100" value="85"/></div>
+      <div class="s-row"><span>Particles</span><button class="toggle" id="particlesToggle">ON</button></div>
+      <div class="s-row"><span>Screen Flash</span><button class="toggle" id="flashToggle">ON</button></div>
+    </div>
+    <div class="ctrl-list">
+      <div class="c-row"><kbd>← →</kbd><span>Move Ship</span></div>
+      <div class="c-row"><kbd>Space</kbd><span>Shoot</span></div>
+      <div class="c-row"><kbd>Esc</kbd><span>Pause / Resume</span></div>
+    </div>
+    <button class="btn-secondary" id="settingsBackBtn">← BACK</button>
+  </div>
+</div>
+
+<div id="gameOverScreen" class="screen hidden">
+  <div class="star-canvas"></div>
+  <div class="sc">
+    <h2 class="over-title">MISSION FAILED</h2>
+    <div class="end-stat">SCORE <span id="goScore">0</span></div>
+    <div class="end-stat small">REACHED LEVEL <span id="goLevel">1</span> / 20</div>
+    <div class="end-btns">
+      <button class="btn-primary" id="restartBtn">TRY AGAIN</button>
+      <button class="btn-secondary" id="goMenuBtn">MAIN MENU</button>
     </div>
   </div>
+</div>
 
-  <!-- GAME -->
-  <div id="screen-game" class="screen">
-    <div id="hud">
-      <div class="hcell"><span class="hlbl">SCORE</span><span id="score" class="hval">0</span></div>
-      <div class="hcell mid"><span class="hlbl">MISSES</span><span id="misses" class="hval">● ● ●</span></div>
-      <div class="hcell right"><span class="hlbl">COMBO</span><span id="combo" class="hval">×1</span></div>
-    </div>
-    <canvas id="canvas"></canvas>
-    <div id="dpad">
-      <div class="dpad-row"><button id="d-up">▲</button></div>
-      <div class="dpad-row">
-        <button id="d-left">◀</button>
-        <button id="d-down">▼</button>
-        <button id="d-right">▶</button>
-      </div>
-    </div>
+<div id="victoryScreen" class="screen hidden">
+  <div class="star-canvas"></div>
+  <div class="sc">
+    <h2 class="victory-title">GALAXY SAVED!</h2>
+    <div class="victory-sub">You defeated the Cosmic Titan!</div>
+    <div class="end-stat">FINAL SCORE <span id="vicScore">0</span></div>
+    <button class="btn-primary" id="vicMenuBtn">MAIN MENU</button>
   </div>
+</div>
 
-  <!-- GAME OVER -->
-  <div id="screen-over" class="screen">
-    <img class="bg-img" src="https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1000&auto=format&fit=crop&q=70" alt="" />
-    <div class="over-content">
-      <h2>COLLAPSED</h2>
-      <div class="over-stats">
-        <div class="ostat"><span class="olbl">Score</span><span id="o-score" class="oval">0</span></div>
-        <div class="ostat"><span class="olbl">Orbs</span><span id="o-orbs" class="oval">0</span></div>
-        <div class="ostat"><span class="olbl">Best Combo</span><span id="o-combo" class="oval">×1</span></div>
-      </div>
-      <div id="o-newhi" class="newhi hidden">★ NEW BEST ★</div>
-      <button id="btn-retry">PLAY AGAIN</button>
-      <button id="btn-menu" class="ghost">MENU</button>
-    </div>
+<div id="nameEntryScreen" class="screen hidden">
+  <div class="star-canvas"></div>
+  <div class="sc">
+    <h2 class="screen-title">🌟 HIGH SCORE!</h2>
+    <div class="end-stat" id="entryScore">0</div>
+    <p class="name-prompt">Enter your pilot name:</p>
+    <input type="text" id="nameInput" class="name-input" maxlength="12" placeholder="PILOT"/>
+    <button class="btn-primary" id="submitBtn">SUBMIT</button>
   </div>
+</div>
 
-  <script src="script.js"></script>
+<!-- ═══ GAME ═══ -->
+<div id="gameUI" class="hidden">
+  <div class="hud">
+    <div class="hud-block"><div class="hl">SCORE</div><div class="hv" id="scoreDisplay">0</div></div>
+    <div class="hud-block center"><div class="hl">LEVEL</div><div class="hv" id="levelDisplay">1 / 20</div></div>
+    <div class="hud-block"><div class="hl">TIME</div><div class="hv" id="timerDisplay">2:20</div></div>
+    <div class="hud-block"><div class="hl">LIVES</div><div class="hv red" id="livesDisplay">♥♥♥</div></div>
+    <button class="icon-btn" id="pauseBtn" title="Pause (Esc)">⏸</button>
+  </div>
+  <div id="bossBar" class="hidden">
+    <span id="bossBarName">BOSS</span>
+    <div class="boss-track"><div id="bossHpFill" class="boss-fill"></div></div>
+    <span id="bossHpText">100%</span>
+  </div>
+  <div id="powerupBar"></div>
+  <canvas id="gameCanvas"></canvas>
+  <div id="announceEl"></div>
+</div>
+
+<!-- ═══ OVERLAYS ═══ -->
+<div id="pauseOverlay" class="overlay hidden">
+  <div class="ov-box">
+    <h2 class="ov-title">⏸ PAUSED</h2>
+    <button class="btn-primary" id="resumeBtn">▶ RESUME</button>
+    <button class="btn-secondary" id="pauseSettingsBtn">⚙ SETTINGS</button>
+    <button class="btn-secondary danger" id="quitBtn">✕ QUIT TO MENU</button>
+  </div>
+</div>
+
+<div id="levelCompleteOverlay" class="overlay hidden">
+  <div class="ov-box">
+    <h2 class="ov-title green" id="lcTitle">LEVEL CLEAR!</h2>
+    <div id="lcStats" class="stat-grid"></div>
+    <div id="bossWarnEl" class="boss-warn hidden">⚠ BOSS INCOMING NEXT LEVEL ⚠</div>
+    <button class="btn-primary" id="continueBtn">CONTINUE →</button>
+    <div class="hint-text">or press <kbd>Space</kbd></div>
+  </div>
+</div>
+
+<div id="bossIntroOverlay" class="overlay hidden">
+  <div class="ov-box boss-intro-box">
+    <div class="bi-warning">⚠ WARNING ⚠</div>
+    <div class="bi-label">BOSS APPROACHING</div>
+    <div class="bi-name" id="biName">GRANITE GUARDIAN</div>
+    <div class="bi-sub" id="biSub">The Ancient Destroyer</div>
+    <div class="bi-bar"><div class="bi-fill" id="biFill"></div></div>
+  </div>
+</div>
+
+<script src="script.js"></script>
 </body>
 </html>
