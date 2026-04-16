@@ -30,6 +30,70 @@ const BOSSES = {
   20: {name:'COSMIC TITAN',    sub:'— END OF ALL THINGS —',  color:'#aa1800',glow:'#ff2d55',hp:140, sz:108,spd:2.0,atkRate:1200,shots:7,shotSpd:5,  pattern:'chaos',final:true},
 };
 
+// ── Support Upgrade Pool ─────────────────────────────────
+const SUPPORT_POOL = [
+  {
+    id:'companion', icon:'🛸', name:'WING COMPANION', rarity:'epic',
+    desc:'A fighter drone joins your side and auto-shoots nearby enemies.',
+    maxStack:3, stackLabel: n => `${n}/3 companions`,
+    apply(gs){ gs.companions.push({slot:gs.companions.length,x:gs.p.x,y:gs.p.y,shootCD:0,pulse:0}); }
+  },
+  {
+    id:'afterburner', icon:'🔥', name:'AFTERBURNER', rarity:'rare',
+    desc:'Increases ship speed by 2. Stacks up to 4×.',
+    maxStack:4, stackLabel: n => `+${n*2} speed`,
+    apply(gs){ gs.upgrades.speed=(gs.upgrades.speed||0)+2; }
+  },
+  {
+    id:'overclock', icon:'⚡', name:'OVERCLOCK', rarity:'rare',
+    desc:'Permanently reduces shoot cooldown by 20ms.',
+    maxStack:5, stackLabel: n => `-${n*20}ms cooldown`,
+    apply(gs){ gs.upgrades.cooldown=(gs.upgrades.cooldown||0)+20; }
+  },
+  {
+    id:'triplecore', icon:'✦', name:'TRIPLE CORE', rarity:'rare',
+    desc:'Permanently fires 3 bullets instead of 1.',
+    maxStack:1, stackLabel: ()=>'active',
+    apply(gs){ gs.upgrades.tripleShot=true; }
+  },
+  {
+    id:'missilepod', icon:'🚀', name:'MISSILE POD', rarity:'epic',
+    desc:'Launches a homing missile at the nearest enemy every 4s.',
+    maxStack:2, stackLabel: n=>`${n} pod${n>1?'s':''}`,
+    apply(gs){ gs.upgrades.missiles=(gs.upgrades.missiles||0)+1; }
+  },
+  {
+    id:'pointdefense', icon:'🛡', name:'POINT DEFENSE', rarity:'rare',
+    desc:'Destroys boss projectiles that come within 70px.',
+    maxStack:1, stackLabel: ()=>'active',
+    apply(gs){ gs.upgrades.pointDefense=true; }
+  },
+  {
+    id:'salvager', icon:'💎', name:'SALVAGER', rarity:'common',
+    desc:'Power-up duration increased by 3 seconds.',
+    maxStack:4, stackLabel: n=>`+${n*3}s duration`,
+    apply(gs){ gs.upgrades.puBonus=(gs.upgrades.puBonus||0)+3000; }
+  },
+  {
+    id:'scoremult', icon:'⭐', name:'SCORE AMPLIFIER', rarity:'common',
+    desc:'Earn +25% score for all destroyed enemies.',
+    maxStack:4, stackLabel: n=>`+${n*25}% score`,
+    apply(gs){ gs.upgrades.scoreMult=(gs.upgrades.scoreMult||0)+0.25; }
+  },
+  {
+    id:'reactor', icon:'☢', name:'REACTOR CORE', rarity:'common',
+    desc:'Regenerate 1 life at the start of every 3rd boss level.',
+    maxStack:1, stackLabel: ()=>'active',
+    apply(gs){ gs.upgrades.reactor=true; }
+  },
+  {
+    id:'shieldgen', icon:'🔵', name:'SHIELD GENERATOR', rarity:'rare',
+    desc:'Start every level with a shield already active.',
+    maxStack:1, stackLabel: ()=>'active',
+    apply(gs){ gs.upgrades.autoShield=true; }
+  },
+];
+
 // ═══════════════════════════════════════════════════════════
 //   MUSIC ENGINE
 // ═══════════════════════════════════════════════════════════
@@ -457,18 +521,26 @@ function initGame(){
   GS={
     p:{x:canvas.width/2,y:canvas.height-60,w:36,h:40,damage:0,dead:false},
     bullets:[],meteors:[],powerups:[],particles:[],explosions:[],bproj:[],
+    companions:[], missiles:[],
     score:0,lives:3,level:1,
     timer:LEVEL_SECS*1000,quota:0,spawned:0,destroyed:0,
     spawnIv:0,spawnT:0,shootCD:0,
     effects:{},invincible:false,invT:0,boss:null,
+    upgrades:{}, pickedUpgrades:{},
   };
   setupLevel();
 }
 
 function setupLevel(){
   const lv=GS.level;
-  GS.bullets=[];GS.meteors=[];GS.powerups=[];GS.bproj=[];
+  GS.bullets=[];GS.meteors=[];GS.powerups=[];GS.bproj=[];GS.missiles=[];
   GS.timer=LEVEL_SECS*1000;GS.destroyed=0;
+  // Apply auto-shield upgrade
+  if(GS.upgrades.autoShield) GS.effects.shield=PU_DUR+(GS.upgrades.puBonus||0);
+  // Reactor: regen 1 life every 3rd boss
+  if(GS.upgrades.reactor && BOSS_LEVELS.has(lv) && lv%3===0 && GS.lives<3){
+    GS.lives=Math.min(3,GS.lives+1); GS.p.damage=3-GS.lives;
+  }
   if(BOSS_LEVELS.has(lv)){
     GS.quota=0;GS.spawned=0;
     phase='bossIntro';
@@ -519,12 +591,18 @@ function update(dt){
   if(GS.invT>0){GS.invT-=dt;if(GS.invT<=0)GS.invincible=false;}
   for(let k in GS.effects){GS.effects[k]-=dt;if(GS.effects[k]<=0)delete GS.effects[k];}
 
-  if(keys['ArrowLeft']||keys['a'])  GS.p.x=Math.max(GS.p.w/2,GS.p.x-9);
-  if(keys['ArrowRight']||keys['d']) GS.p.x=Math.min(canvas.width-GS.p.w/2,GS.p.x+9);
+  const moveSpd=9+(GS.upgrades.speed||0);
+  if(keys['ArrowLeft']||keys['a'])  GS.p.x=Math.max(GS.p.w/2,GS.p.x-moveSpd);
+  if(keys['ArrowRight']||keys['d']) GS.p.x=Math.min(canvas.width-GS.p.w/2,GS.p.x+moveSpd);
 
+  const baseCooldown = (GS.effects.rapid?SHOOT_RAPID:SHOOT_NORM)-(GS.upgrades.cooldown||0);
   if((keys[' ']||keys['ArrowUp'])&&GS.shootCD<=0){
-    shoot();GS.shootCD=GS.effects.rapid?SHOOT_RAPID:SHOOT_NORM;
+    shoot();GS.shootCD=Math.max(60,baseCooldown);
   }
+
+  updateCompanions(dt);
+  updateMissiles(dt);
+  updatePointDefense();
 
   GS.bullets=GS.bullets.filter(b=>b.y>-10);
   GS.bullets.forEach(b=>{b.x+=b.vx;b.y+=b.vy;});
@@ -641,7 +719,7 @@ function killBoss(){
 function shoot(){
   SFX.shoot();
   const{x,y}=GS.p;
-  if(GS.effects.triple){GS.bullets.push({x:x-14,y:y-20,vx:-1.5,vy:-10},{x,y:y-24,vx:0,vy:-10},{x:x+14,y:y-20,vx:1.5,vy:-10});}
+  if(GS.effects.triple||GS.upgrades.tripleShot){GS.bullets.push({x:x-14,y:y-20,vx:-1.5,vy:-10},{x,y:y-24,vx:0,vy:-10},{x:x+14,y:y-20,vx:1.5,vy:-10});}
   else{GS.bullets.push({x,y:y-24,vx:0,vy:-10});}
 }
 function hitPlayer(){
@@ -686,7 +764,8 @@ function spawnMeteor(){
   GS.meteors.push({x:Math.random()*(canvas.width-sz*2)+sz,y:-sz,r:sz,vx:(Math.random()-.5)*1.6,vy:spd+Math.random()*spd*.8,rot:0,rotSpd:(Math.random()-.5)*.05,color:cols[Math.floor(Math.random()*cols.length)],hp,maxHp:hp});
 }
 function destroyMeteor(mi,m){
-  GS.score+=Math.round(m.r*3);GS.destroyed++;
+  const mult=1+(GS.upgrades.scoreMult||0);
+  GS.score+=Math.round(m.r*3*mult);GS.destroyed++;
   SFX.explode();spawnParts(m.x,m.y,m.color,18);addExp(m.x,m.y,'#ff6a00');
   GS.meteors.splice(mi,1);
   if(Math.random()<PU_PROB)spawnPU(m.x,m.y);
@@ -704,7 +783,7 @@ function collectPU(type){
   if(type==='bomb'){
     GS.meteors.forEach(m=>{spawnParts(m.x,m.y,m.color,12);addExp(m.x,m.y,'#ff6a00');GS.score+=Math.round(m.r*2);GS.destroyed++;});
     GS.meteors=[];if(settings.flash)doFlash('#ff2d5530');
-  } else{GS.effects[type]=PU_DUR;}
+  } else{GS.effects[type]=PU_DUR+(GS.upgrades.puBonus||0);}
 }
 
 function spawnParts(x,y,color,n){
@@ -746,12 +825,229 @@ function showLC(title,stats,nextBoss){
   document.getElementById('lcStats').innerHTML=stats.map(s=>`<div class="stat-row"><span class="stat-label">${s.l}</span><span class="stat-val">${s.v}</span></div>`).join('');
   document.getElementById('bossWarnEl').classList.toggle('hidden',!nextBoss);
   showScreen('game');showOv('levelComplete');
-  const go=()=>{hideOv('levelComplete');document.removeEventListener('keydown',spKey);document.getElementById('continueBtn').removeEventListener('click',go);advLevel();};
+  const go=()=>{
+    hideOv('levelComplete');
+    document.removeEventListener('keydown',spKey);
+    document.getElementById('continueBtn').removeEventListener('click',go);
+    // Show support screen before advancing (skip on final level)
+    if(GS.level<MAX_LEVELS) showSupportScreen();
+    else advLevel();
+  };
   const spKey=e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();go();}};
   document.addEventListener('keydown',spKey);
   document.getElementById('continueBtn').addEventListener('click',go,{once:true});
 }
-function advLevel(){GS.level++;if(GS.level>MAX_LEVELS){triggerVictory();return;}setupLevel();if(phase==='playing'){showScreen('game');announce(`LEVEL ${GS.level}`);}}
+// ── Support Screen ───────────────────────────────────────
+function showSupportScreen(){
+  const pool = buildSupportPool();
+  const cards = document.getElementById('supportCards');
+  cards.innerHTML = pool.map((up,i)=>`
+    <div class="support-card rarity-${up.rarity}" onclick="pickSupport(${i})">
+      <div class="sc-key">${i+1}</div>
+      <div class="sc-icon">${up.icon}</div>
+      <div class="sc-name">${up.name}</div>
+      <div class="sc-rarity ${up.rarity}">${up.rarity.toUpperCase()}</div>
+      <div class="sc-desc">${up.desc}</div>
+      ${(GS.pickedUpgrades[up.id]||0)>0?`<div class="sc-stacks">${up.stackLabel(GS.pickedUpgrades[up.id])}</div>`:''}
+    </div>`).join('');
+  showOv('support');
+  window._supportPool=pool;
+  const keyPick=e=>{
+    const n=parseInt(e.key);
+    if(n>=1&&n<=pool.length){document.removeEventListener('keydown',keyPick);pickSupport(n-1);}
+  };
+  document.addEventListener('keydown',keyPick);
+  window._supportKeyPick=keyPick;
+}
+function buildSupportPool(){
+  // Pick 3 distinct upgrades from pool, weighted by rarity, filtered by maxStack
+  const available=SUPPORT_POOL.filter(u=>(GS.pickedUpgrades[u.id]||0)<u.maxStack);
+  const weights={common:5,rare:3,epic:1};
+  const weighted=[];
+  available.forEach(u=>{for(let i=0;i<weights[u.rarity];i++)weighted.push(u);});
+  // Shuffle and pick 3 unique
+  const shuffled=[...weighted].sort(()=>Math.random()-.5);
+  const seen=new Set();
+  const out=[];
+  for(const u of shuffled){if(!seen.has(u.id)){seen.add(u.id);out.push(u);}if(out.length===3)break;}
+  // Fill to 3 if pool is small
+  while(out.length<3&&out.length<available.length) out.push(available[out.length]);
+  return out;
+}
+window.pickSupport=function(i){
+  document.removeEventListener('keydown',window._supportKeyPick);
+  const up=window._supportPool[i];
+  if(!up)return;
+  GS.pickedUpgrades[up.id]=(GS.pickedUpgrades[up.id]||0)+1;
+  up.apply(GS);
+  hideOv('support');
+  updateUpgradeBar();
+  advLevel();
+};
+
+function advLevel(){
+  GS.level++;
+  if(GS.level>MAX_LEVELS){triggerVictory();return;}
+  setupLevel();
+  if(phase==='playing'){showScreen('game');announce(`LEVEL ${GS.level}`);}
+}
+
+// ── Companion AI ─────────────────────────────────────────
+function updateCompanions(dt){
+  if(!GS.companions||GS.companions.length===0)return;
+  const slots=[{ox:-48,oy:10},{ox:48,oy:10},{ox:0,oy:24}];
+  GS.companions.forEach((c,idx)=>{
+    const slot=slots[idx]||{ox:(idx%2===0?-1:1)*(50+idx*20),oy:20};
+    const tx=GS.p.x+slot.ox, ty=GS.p.y+slot.oy;
+    // Smooth follow
+    c.x+=(tx-c.x)*0.1; c.y+=(ty-c.y)*0.1;
+    c.pulse+=dt*0.004;
+    // Find nearest threat
+    c.shootCD-=dt;
+    if(c.shootCD<=0){
+      const target=nearestThreat(c.x,c.y);
+      if(target){
+        const a=Math.atan2(target.y-c.y,target.x-c.x);
+        const spd=11;
+        GS.bullets.push({x:c.x,y:c.y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,companion:true});
+        c.shootCD=380;
+        tone(600,0.05,'square',0.06);
+      }else c.shootCD=200;
+    }
+  });
+}
+function nearestThreat(cx,cy){
+  let best=null,bd=9999;
+  if(GS.boss&&!GS.boss.dead&&!GS.boss.entering){
+    const d=dist(cx,cy,GS.boss.x,GS.boss.y);if(d<bd){bd=d;best={x:GS.boss.x,y:GS.boss.y};}
+  }
+  GS.meteors.forEach(m=>{const d=dist(cx,cy,m.x,m.y);if(d<bd){bd=d;best={x:m.x,y:m.y};}});
+  return bd<600?best:null;
+}
+
+// ── Missile System ───────────────────────────────────────
+function updateMissiles(dt){
+  if(!GS.upgrades.missiles)return;
+  GS.p._missileT=(GS.p._missileT||0)-dt;
+  if(GS.p._missileT<=0){
+    const count=GS.upgrades.missiles;
+    for(let i=0;i<count;i++){
+      GS.missiles.push({x:GS.p.x+(i*20-count*10),y:GS.p.y-20,vx:0,vy:-3,life:4000,trail:[]});
+    }
+    GS.p._missileT=4000;
+    tone(300,0.12,'sawtooth',0.1);
+  }
+  GS.missiles=GS.missiles.filter(m=>m.life>0);
+  GS.missiles.forEach(m=>{
+    m.life-=dt;
+    m.trail.push({x:m.x,y:m.y,a:1});
+    if(m.trail.length>12) m.trail.shift();
+    m.trail.forEach(t=>{t.a-=0.08;});
+    // Home on nearest threat
+    const tgt=nearestThreat(m.x,m.y);
+    if(tgt){
+      const a=Math.atan2(tgt.y-m.y,tgt.x-m.x);
+      m.vx+=(Math.cos(a)*3-m.vx)*0.12;
+      m.vy+=(Math.sin(a)*3-m.vy)*0.12;
+    }
+    m.x+=m.vx; m.y+=m.vy;
+    // Hit check
+    for(let mi=GS.meteors.length-1;mi>=0;mi--){
+      const me=GS.meteors[mi];
+      if(dist(m.x,m.y,me.x,me.y)<me.r+6){
+        me.hp-=2;spawnParts(m.x,m.y,'#ff6a00',12);addExp(m.x,m.y,'#ff6a00');
+        if(me.hp<=0)destroyMeteor(mi,me);
+        m.life=0;return;
+      }
+    }
+    if(GS.boss&&!GS.boss.dead&&dist(m.x,m.y,GS.boss.x,GS.boss.y)<GS.boss.sz/2+6){
+      GS.boss.hp-=3;spawnParts(m.x,m.y,GS.boss.glow,16);setBossBar(true);
+      if(GS.boss.hp<=0)killBoss();
+      m.life=0;
+    }
+  });
+}
+
+// ── Point Defense ────────────────────────────────────────
+function updatePointDefense(){
+  if(!GS.upgrades.pointDefense)return;
+  for(let i=GS.bproj.length-1;i>=0;i--){
+    const p=GS.bproj[i];
+    if(dist(p.x,p.y,GS.p.x,GS.p.y)<70){
+      spawnParts(p.x,p.y,'#39ff14',8);GS.bproj.splice(i,1);
+    }
+  }
+}
+
+// ── Upgrade HUD ──────────────────────────────────────────
+function updateUpgradeBar(){
+  const bar=document.getElementById('upgradeBar');
+  if(!bar)return;
+  bar.innerHTML='';
+  const icons={companion:'🛸',afterburner:'🔥',overclock:'⚡',triplecore:'✦',missilepod:'🚀',
+    pointdefense:'🛡',salvager:'💎',scoremult:'⭐',reactor:'☢',shieldgen:'🔵'};
+  Object.entries(GS.pickedUpgrades).forEach(([id,n])=>{
+    if(n>0){
+      const el=document.createElement('div');
+      el.className='upg-pill';
+      el.textContent=`${icons[id]||'?'} ${n>1?'×'+n:''}`;
+      el.title=SUPPORT_POOL.find(u=>u.id===id)?.name||id;
+      bar.appendChild(el);
+    }
+  });
+}
+
+// ── Draw Companions ──────────────────────────────────────
+function drawCompanions(){
+  if(!GS.companions||GS.companions.length===0)return;
+  GS.companions.forEach(c=>{
+    ctx.save();
+    // Glow
+    ctx.shadowBlur=12+Math.sin(c.pulse)*4;ctx.shadowColor='#00c8ff';
+    // Mini ship body
+    ctx.fillStyle='#00c8ff';
+    const s=0.6; // scale factor relative to player ship
+    const{x,y}=c;
+    ctx.beginPath();
+    ctx.moveTo(x,         y-14*s);
+    ctx.lineTo(x+10*s,    y+8*s);
+    ctx.lineTo(x+5*s,     y+12*s);
+    ctx.lineTo(x,         y+6*s);
+    ctx.lineTo(x-5*s,     y+12*s);
+    ctx.lineTo(x-10*s,    y+8*s);
+    ctx.closePath();ctx.fill();
+    // Cockpit
+    ctx.fillStyle='#001a2e';ctx.beginPath();ctx.ellipse(x,y-2*s,3*s,5*s,0,0,Math.PI*2);ctx.fill();
+    // Engine pulse
+    const ep=['#00f5ff','#00c8ff','#0099cc'][Math.floor(Date.now()/120)%3];
+    ctx.fillStyle=ep;ctx.shadowColor=ep;
+    ctx.beginPath();ctx.ellipse(x,y+12*s,3*s,5*s+Math.sin(c.pulse*3)*2,0,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  });
+}
+
+// ── Draw Missiles ────────────────────────────────────────
+function drawMissiles(){
+  GS.missiles&&GS.missiles.forEach(m=>{
+    ctx.save();
+    // Trail
+    m.trail.forEach(t=>{
+      ctx.globalAlpha=Math.max(0,t.a)*0.4;
+      ctx.fillStyle='#ff6a00';
+      ctx.beginPath();ctx.arc(t.x,t.y,2,0,Math.PI*2);ctx.fill();
+    });
+    ctx.globalAlpha=1;
+    // Missile body
+    const a=Math.atan2(m.vy,m.vx);
+    ctx.translate(m.x,m.y);ctx.rotate(a+Math.PI/2);
+    ctx.shadowColor='#ff6a00';ctx.shadowBlur=10;
+    ctx.fillStyle='#ff9d00';
+    ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(3,4);ctx.lineTo(-3,4);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#ff2d55';
+    ctx.beginPath();ctx.arc(0,5,3,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  });
+}
 
 function triggerGameOver(){
   phase='gameOver';Music.play('gameover');
@@ -856,7 +1152,9 @@ function draw(){
   if(GS.boss&&!GS.boss.dead)drawBoss(GS.boss);
   GS.bproj.forEach(p=>{ctx.save();ctx.shadowColor=p.color;ctx.shadowBlur=14;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();ctx.restore();});
   GS.powerups.forEach(drawPU);
-  GS.bullets.forEach(b=>{ctx.save();ctx.shadowColor='#ffd600';ctx.shadowBlur=10;ctx.fillStyle='#ffd600';ctx.beginPath();ctx.ellipse(b.x,b.y,3,8,0,0,Math.PI*2);ctx.fill();ctx.restore();});
+  drawMissiles();
+  GS.bullets.forEach(b=>{ctx.save();ctx.shadowColor=b.companion?'#00c8ff':'#ffd600';ctx.shadowBlur=10;ctx.fillStyle=b.companion?'#00c8ff':'#ffd600';ctx.beginPath();ctx.ellipse(b.x,b.y,3,8,0,0,Math.PI*2);ctx.fill();ctx.restore();});
+  drawCompanions();
   drawPlayer();
 }
 function drawPlayer(){
@@ -1012,6 +1310,7 @@ function startFresh(){
   Music.resume();getAC();
   cancelAnimationFrame(animId);animId=0;
   initGame();showScreen('game');announce('LEVEL 1');
+  updateUpgradeBar();
   lastTs=0;animId=requestAnimationFrame(gameLoop);
 }
 

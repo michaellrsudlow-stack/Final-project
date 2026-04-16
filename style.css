@@ -164,3 +164,35 @@ kbd{background:rgba(0,245,255,0.12);border:1px solid rgba(0,245,255,0.4);border-
 /* ── Online Note ── */
 .lb-online-note{font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--cyan);letter-spacing:2px;padding:4px 0 8px;opacity:.7}
 .lb-online-note.local{color:var(--dim)}
+
+/* ── Support Overlay ── */
+.support-box{max-width:760px;width:95vw;padding:28px 32px;gap:20px}
+.support-header{text-align:center}
+.support-eyebrow{font-family:'Share Tech Mono',monospace;font-size:.72rem;letter-spacing:5px;color:var(--cyan);opacity:.7;margin-bottom:6px}
+.support-title{font-size:clamp(1.3rem,3vw,1.9rem);letter-spacing:4px;color:var(--yellow);text-shadow:0 0 20px rgba(255,214,0,.4);margin-bottom:4px}
+.support-sub{font-family:'Share Tech Mono',monospace;font-size:.75rem;color:var(--dim)}
+
+.support-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%}
+@media(max-width:600px){.support-cards{grid-template-columns:1fr;gap:10px}}
+
+.support-card{background:rgba(0,10,30,.7);border:1px solid rgba(0,245,255,.18);border-radius:10px;padding:18px 14px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;position:relative;overflow:hidden}
+.support-card:hover{border-color:var(--cyan);background:rgba(0,245,255,.07);transform:translateY(-3px);box-shadow:0 0 24px rgba(0,245,255,.15)}
+.support-card:active{transform:translateY(0) scale(.97)}
+.support-card.rarity-rare{border-color:rgba(200,0,255,.4)}
+.support-card.rarity-rare:hover{border-color:var(--purple);background:rgba(200,0,255,.07);box-shadow:0 0 24px rgba(200,0,255,.15)}
+.support-card.rarity-epic{border-color:rgba(255,106,0,.4)}
+.support-card.rarity-epic:hover{border-color:var(--orange);background:rgba(255,106,0,.07);box-shadow:0 0 24px rgba(255,106,0,.2)}
+
+.sc-key{position:absolute;top:8px;left:10px;font-family:'Share Tech Mono',monospace;font-size:.65rem;color:var(--dim);border:1px solid rgba(255,255,255,.15);border-radius:3px;padding:1px 5px}
+.sc-icon{font-size:2rem;line-height:1}
+.sc-name{font-family:'Orbitron',sans-serif;font-size:.78rem;font-weight:700;letter-spacing:2px;color:var(--white)}
+.sc-rarity{font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:3px}
+.sc-rarity.common{color:var(--cyan)}
+.sc-rarity.rare{color:var(--purple)}
+.sc-rarity.epic{color:var(--orange)}
+.sc-desc{font-family:'Share Tech Mono',monospace;font-size:.7rem;color:var(--dim);line-height:1.5}
+.sc-stacks{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:var(--yellow);opacity:.8}
+
+/* Active upgrades HUD strip */
+#upgradeBar{width:100%;min-height:22px;display:flex;gap:6px;padding:2px 14px;background:rgba(0,0,10,.4);position:relative;z-index:10;flex-wrap:wrap}
+.upg-pill{font-family:'Share Tech Mono',monospace;font-size:.62rem;padding:2px 8px;border-radius:12px;display:flex;align-items:center;gap:4px;border:1px solid rgba(255,255,255,.15);color:rgba(232,240,255,.6)}

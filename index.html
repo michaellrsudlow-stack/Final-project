@@ -109,6 +109,7 @@
     <span id="bossHpText">100%</span>
   </div>
   <div id="powerupBar"></div>
+  <div id="upgradeBar"></div>
   <canvas id="gameCanvas"></canvas>
   <div id="announceEl"></div>
 </div>
@@ -130,6 +131,18 @@
     <div id="bossWarnEl" class="boss-warn hidden">⚠ BOSS INCOMING NEXT LEVEL ⚠</div>
     <button class="btn-primary" id="continueBtn">CONTINUE →</button>
     <div class="hint-text">or press <kbd>Space</kbd></div>
+  </div>
+</div>
+
+<div id="supportOverlay" class="overlay hidden">
+  <div class="ov-box support-box">
+    <div class="support-header">
+      <div class="support-eyebrow">★ MISSION SUPPORT ★</div>
+      <h2 class="ov-title support-title">CHOOSE YOUR UPGRADE</h2>
+      <div class="support-sub">Select one before the next level</div>
+    </div>
+    <div id="supportCards" class="support-cards"></div>
+    <div class="hint-text">Click a card or press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></div>
   </div>
 </div>
 
