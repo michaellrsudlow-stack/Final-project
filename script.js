@@ -401,7 +401,7 @@ function hideOv(id){document.getElementById(id+'Overlay').classList.add('hidden'
 
 // ── Resize ───────────────────────────────────────────
 function resize(){
-  const maxW=Math.min(720,window.innerWidth);
+  const maxW=window.innerWidth;
   const hudEl=document.querySelector('.hud'), barEl=document.getElementById('powerupBar');
   const bossEl=document.getElementById('bossBar');
   const hudH=(hudEl?.offsetHeight||46)+(barEl?.offsetHeight||26)+
@@ -455,7 +455,7 @@ const SFX={
 function initGame(){
   resize();
   GS={
-    p:{x:canvas.width/2,y:canvas.height-60,w:36,h:40},
+    p:{x:canvas.width/2,y:canvas.height-60,w:36,h:40,damage:0,dead:false},
     bullets:[],meteors:[],powerups:[],particles:[],explosions:[],bproj:[],
     score:0,lives:3,level:1,
     timer:LEVEL_SECS*1000,quota:0,spawned:0,destroyed:0,
@@ -519,8 +519,8 @@ function update(dt){
   if(GS.invT>0){GS.invT-=dt;if(GS.invT<=0)GS.invincible=false;}
   for(let k in GS.effects){GS.effects[k]-=dt;if(GS.effects[k]<=0)delete GS.effects[k];}
 
-  if(keys['ArrowLeft']||keys['a'])  GS.p.x=Math.max(GS.p.w/2,GS.p.x-5);
-  if(keys['ArrowRight']||keys['d']) GS.p.x=Math.min(canvas.width-GS.p.w/2,GS.p.x+5);
+  if(keys['ArrowLeft']||keys['a'])  GS.p.x=Math.max(GS.p.w/2,GS.p.x-9);
+  if(keys['ArrowRight']||keys['d']) GS.p.x=Math.min(canvas.width-GS.p.w/2,GS.p.x+9);
 
   if((keys[' ']||keys['ArrowUp'])&&GS.shootCD<=0){
     shoot();GS.shootCD=GS.effects.rapid?SHOOT_RAPID:SHOOT_NORM;
@@ -646,10 +646,36 @@ function shoot(){
 }
 function hitPlayer(){
   GS.lives--;SFX.die();
+  GS.p.damage=3-GS.lives; // 0=pristine,1=dented,2=critical
   spawnParts(GS.p.x,GS.p.y,'#ff2d55',25);addExp(GS.p.x,GS.p.y,'#ff2d55');
   if(settings.flash)doFlash('#ff2d5540');
   GS.invincible=true;GS.invT=1800;
-  if(GS.lives<=0)setTimeout(triggerGameOver,500);
+  if(GS.lives<=0){
+    shipDeathExplosion();
+    setTimeout(triggerGameOver,1400);
+  }
+}
+function shipDeathExplosion(){
+  GS.p.dead=true;
+  const{x,y}=GS.p;
+  // Wave of expanding rings + debris bursts
+  for(let i=0;i<5;i++){
+    setTimeout(()=>{
+      spawnParts(x+(Math.random()-.5)*40,y+(Math.random()-.5)*30,'#ff6a00',22);
+      spawnParts(x+(Math.random()-.5)*30,y+(Math.random()-.5)*20,'#ffd600',14);
+      addExp(x+(Math.random()-.5)*50,y+(Math.random()-.5)*30,'#ff2d55');
+      addExp(x+(Math.random()-.5)*40,y+(Math.random()-.5)*25,'#ff6a00');
+      SFX.explode();
+    },i*200);
+  }
+  // Final big bang
+  setTimeout(()=>{
+    spawnParts(x,y,'#ffffff',40);
+    spawnParts(x,y,'#ff6a00',30);
+    spawnParts(x,y,'#ffd600',20);
+    addExp(x,y,'#ffffff');addExp(x,y,'#ff6a00');
+    if(settings.flash)doFlash('#ff6a0066');
+  },1000);
 }
 function useShield(){spawnParts(GS.p.x,GS.p.y,'#39ff14',20);addExp(GS.p.x,GS.p.y,'#39ff14');delete GS.effects.shield;GS.invincible=true;GS.invT=600;}
 
@@ -835,15 +861,101 @@ function draw(){
 }
 function drawPlayer(){
   const{x,y,w,h}=GS.p;
+  if(GS.p.dead) return;
   if(GS.invincible&&Math.floor(Date.now()/100)%2===0)return;
+  const dmg=GS.p.damage||0; // 0=pristine 1=dented 2=critical
+  const t=Date.now();
   ctx.save();
-  const ec=['#ff6a00','#ff9d00','#ffd600'][Math.floor(Date.now()/80)%3];
+
+  // ── Engine exhaust (shrinks with damage) ──
+  const exhaustColors=dmg===2?['#ff2d55','#ff6a00','#ff4400']:['#ff6a00','#ff9d00','#ffd600'];
+  const ec=exhaustColors[Math.floor(t/80)%3];
+  const exhaustH=dmg===2?6+Math.random()*6:12+Math.sin(t/80)*4;
   ctx.shadowBlur=15;ctx.shadowColor=ec;ctx.fillStyle=ec;
-  ctx.beginPath();ctx.moveTo(x-8,y+h/2-10);ctx.lineTo(x,y+h/2+12+Math.sin(Date.now()/80)*4);ctx.lineTo(x+8,y+h/2-10);ctx.fill();
-  ctx.shadowBlur=22;ctx.shadowColor='#00f5ff';ctx.fillStyle='#00f5ff';
-  ctx.beginPath();ctx.moveTo(x,y-h/2);ctx.lineTo(x+w/2,y+h/2-8);ctx.lineTo(x+w/4,y+h/2);ctx.lineTo(x,y+h/2-8);ctx.lineTo(x-w/4,y+h/2);ctx.lineTo(x-w/2,y+h/2-8);ctx.closePath();ctx.fill();
-  ctx.fillStyle='#001a2e';ctx.beginPath();ctx.ellipse(x,y-5,6,9,0,0,Math.PI*2);ctx.fill();
-  if(GS.effects.shield){ctx.strokeStyle='#39ff14';ctx.lineWidth=2;ctx.shadowColor='#39ff14';ctx.shadowBlur=16;ctx.globalAlpha=0.7+Math.sin(Date.now()/200)*.3;ctx.beginPath();ctx.arc(x,y,32,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;}
+  ctx.beginPath();
+  ctx.moveTo(x-8,y+h/2-10);
+  ctx.lineTo(x,y+h/2+exhaustH);
+  ctx.lineTo(x+8,y+h/2-10);
+  ctx.fill();
+
+  // Extra sputtering flames on critical damage
+  if(dmg===2){
+    ctx.fillStyle='#ff4400';
+    ctx.globalAlpha=0.5+Math.random()*.5;
+    ctx.beginPath();ctx.moveTo(x-14,y+4);ctx.lineTo(x-10,y+4+Math.random()*8);ctx.lineTo(x-6,y+4);ctx.fill();
+    ctx.beginPath();ctx.moveTo(x+6,y+2);ctx.lineTo(x+10,y+2+Math.random()*8);ctx.lineTo(x+14,y+2);ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  // ── Ship color by damage state ──
+  const shipColor = dmg===0?'#00f5ff': dmg===1?'#88ccdd':'#556677';
+  const glowColor = dmg===0?'#00f5ff': dmg===1?'#ff8844':'#ff4400';
+  ctx.shadowBlur=dmg===2?8:22;
+  ctx.shadowColor=glowColor;
+  ctx.fillStyle=shipColor;
+
+  // ── Main hull ──
+  ctx.beginPath();
+  ctx.moveTo(x,          y-h/2);
+  ctx.lineTo(x+w/2,      y+h/2-8);
+  ctx.lineTo(x+w/4,      y+h/2);
+  ctx.lineTo(x,          y+h/2-8);
+  ctx.lineTo(x-w/4,      y+h/2);
+  ctx.lineTo(x-w/2,      y+h/2-8);
+  ctx.closePath();
+  ctx.fill();
+
+  // ── Damage 1: cracked left wing ──
+  if(dmg>=1){
+    ctx.strokeStyle='#ff4400';ctx.lineWidth=1.5;ctx.shadowBlur=6;ctx.shadowColor='#ff4400';
+    ctx.beginPath();
+    ctx.moveTo(x-w/2+4,  y+h/2-10);
+    ctx.lineTo(x-w/4-2,  y);
+    ctx.lineTo(x-w/4+4,  y-8);
+    ctx.stroke();
+    // scorch mark
+    ctx.fillStyle='rgba(255,80,0,0.35)';
+    ctx.beginPath();ctx.arc(x-w/2+6,y+h/2-12,5,0,Math.PI*2);ctx.fill();
+  }
+
+  // ── Damage 2: cracked right wing + hull burn ──
+  if(dmg>=2){
+    ctx.strokeStyle='#ff2d55';ctx.lineWidth=1.5;ctx.shadowBlur=8;ctx.shadowColor='#ff2d55';
+    ctx.beginPath();
+    ctx.moveTo(x+w/2-4,  y+h/2-10);
+    ctx.lineTo(x+w/4+2,  y-2);
+    ctx.lineTo(x+w/4-4,  y-12);
+    ctx.stroke();
+    // hull burn / charring
+    ctx.fillStyle='rgba(255,0,40,0.25)';
+    ctx.beginPath();ctx.arc(x+w/2-6,y+h/2-12,6,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,100,0,0.2)';
+    ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.fill();
+    // flicker glow on hull
+    ctx.globalAlpha=0.3+Math.sin(t/60)*0.3;
+    ctx.fillStyle='#ff2d55';
+    ctx.beginPath();ctx.arc(x,y+4,8,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  // ── Cockpit ──
+  ctx.shadowBlur=0;
+  ctx.fillStyle = dmg===2?'#331000': dmg===1?'#002233':'#001a2e';
+  ctx.beginPath();ctx.ellipse(x,y-5,6,9,0,0,Math.PI*2);ctx.fill();
+  // cracked cockpit on critical
+  if(dmg>=2){
+    ctx.strokeStyle='rgba(255,60,0,0.7)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(x-3,y-12);ctx.lineTo(x+2,y-2);ctx.lineTo(x-1,y+2);ctx.stroke();
+  }
+
+  // ── Shield ring ──
+  if(GS.effects.shield){
+    ctx.strokeStyle='#39ff14';ctx.lineWidth=2;ctx.shadowColor='#39ff14';ctx.shadowBlur=16;
+    ctx.globalAlpha=0.7+Math.sin(t/200)*.3;
+    ctx.beginPath();ctx.arc(x,y,32,0,Math.PI*2);ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+
   ctx.restore();
 }
 function drawMeteor(m){

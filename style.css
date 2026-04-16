@@ -94,7 +94,7 @@ kbd{background:rgba(0,245,255,0.12);border:1px solid rgba(0,245,255,0.4);border-
 #gameUI{display:flex;flex-direction:column;align-items:center;width:100%;height:100vh;position:fixed;inset:0}
 
 /* HUD */
-.hud{width:100%;max-width:720px;display:flex;align-items:center;gap:4px;padding:6px 14px;background:var(--hud);border-bottom:1px solid rgba(0,245,255,.18);position:relative;z-index:10}
+.hud{width:100%;display:flex;align-items:center;gap:4px;padding:6px 14px;background:var(--hud);border-bottom:1px solid rgba(0,245,255,.18);position:relative;z-index:10}
 .hud-block{display:flex;flex-direction:column;align-items:flex-start;min-width:70px}
 .hud-block.center{flex:1;align-items:center}
 .hl{font-size:.48rem;letter-spacing:3px;color:rgba(232,240,255,.35)}
@@ -106,20 +106,20 @@ kbd{background:rgba(0,245,255,0.12);border:1px solid rgba(0,245,255,0.4);border-
 .icon-btn:hover{background:rgba(0,245,255,.1)}
 
 /* Boss HP Bar */
-#bossBar{width:100%;max-width:720px;display:flex;align-items:center;gap:10px;padding:5px 14px;background:rgba(5,0,15,.7);border-bottom:1px solid rgba(255,45,85,.2);font-family:'Share Tech Mono',monospace;font-size:.75rem;color:var(--red);position:relative;z-index:10}
+#bossBar{width:100%;display:flex;align-items:center;gap:10px;padding:5px 14px;background:rgba(5,0,15,.7);border-bottom:1px solid rgba(255,45,85,.2);font-family:'Share Tech Mono',monospace;font-size:.75rem;color:var(--red);position:relative;z-index:10}
 .boss-track{flex:1;height:10px;background:rgba(255,255,255,.08);border-radius:10px;overflow:hidden}
 .boss-fill{height:100%;background:var(--cyan);border-radius:10px;transition:width .2s,background .3s;box-shadow:0 0 10px var(--cyan)}
 #bossHpText{min-width:40px;text-align:right}
 
 /* Powerup Bar */
-#powerupBar{width:100%;max-width:720px;min-height:26px;display:flex;gap:8px;padding:4px 14px;background:rgba(0,5,20,.55);position:relative;z-index:10}
+#powerupBar{width:100%;min-height:26px;display:flex;gap:8px;padding:4px 14px;background:rgba(0,5,20,.55);position:relative;z-index:10}
 .pu-indicator{font-family:'Share Tech Mono',monospace;font-size:.68rem;padding:2px 10px;border-radius:20px;display:flex;align-items:center;gap:4px}
 .pu-indicator.rapid {border:1px solid var(--yellow);color:var(--yellow);background:rgba(255,214,0,.1)}
 .pu-indicator.triple{border:1px solid var(--cyan);color:var(--cyan);background:rgba(0,245,255,.08)}
 .pu-indicator.shield{border:1px solid var(--green);color:var(--green);background:rgba(57,255,20,.08)}
 
 /* Canvas */
-#gameCanvas{display:block;width:100%;max-width:720px;flex:1;image-rendering:crisp-edges}
+#gameCanvas{display:block;width:100%;flex:1;image-rendering:crisp-edges}
 
 /* Announce */
 #announceEl{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:clamp(1.6rem,6vw,3rem);font-weight:900;letter-spacing:6px;text-align:center;pointer-events:none;opacity:0;transition:opacity .25s;z-index:50;text-shadow:0 0 30px var(--cyan);color:var(--cyan);white-space:nowrap}
