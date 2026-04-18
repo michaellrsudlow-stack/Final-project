@@ -30,7 +30,29 @@ const BOSSES = {
   20: {name:'COSMIC TITAN',    sub:'— END OF ALL THINGS —',  color:'#aa1800',glow:'#ff2d55',hp:140, sz:108,spd:2.0,atkRate:1200,shots:7,shotSpd:5,  pattern:'chaos',final:true},
 };
 
-// ── Support Upgrade Pool ─────────────────────────────────
+// ── Difficulty ────────────────────────────────────────────
+let currentDiff = 'normal';
+const DIFF = {
+  easy:   { lives:5, meteorSpd:0.7, meteorBase:8,  meteorGrow:2, bossHpMult:0.6, puProb:0.38, spawnIvMult:1.4, label:'EASY',   scoreMult:0.75 },
+  normal: { lives:3, meteorSpd:1.0, meteorBase:12, meteorGrow:3, bossHpMult:1.0, puProb:0.26, spawnIvMult:1.0, label:'NORMAL', scoreMult:1.0  },
+  hard:   { lives:2, meteorSpd:1.5, meteorBase:16, meteorGrow:4, bossHpMult:1.5, puProb:0.16, spawnIvMult:0.7, label:'HARD',   scoreMult:1.5  },
+};
+function setDiff(d){
+  currentDiff=d;
+  ['easy','normal','hard'].forEach(k=>{
+    const btn=document.getElementById('d'+k.charAt(0).toUpperCase()+k.slice(1));
+    if(btn){btn.classList.toggle('active',k===d);btn.className=btn.className.replace(/\b(easy|normal|hard)\b/g,'').trim()+' '+k;btn.classList.toggle('active',k===d);}
+  });
+}
+window.setDiff=setDiff;
+
+// ── Leaderboard filter state ──────────────────────────────
+let lbFilter='all', lbDiffFilter='all';
+function setLBFilter(f){ lbFilter=f; document.getElementById('lbAllBtn').classList.toggle('active',f==='all'); document.getElementById('lbMineBtn').classList.toggle('active',f==='mine'); renderLB(); }
+function setLBDiff(d){ lbDiffFilter=d; ['All','Easy','Norm','Hard'].forEach(k=>{ const el=document.getElementById('lbDiff'+k); if(el) el.classList.toggle('active', (d==='normal'?'norm':d)===k.toLowerCase()||(d==='all'&&k==='All')); }); renderLB(); }
+window.setLBFilter=setLBFilter; window.setLBDiff=setLBDiff;
+
+
 const SUPPORT_POOL = [
   {
     id:'companion', icon:'🛸', name:'WING COMPANION', rarity:'epic',
@@ -420,13 +442,51 @@ function mergedLB() {
   return all.slice(0,MAX_LB);
 }
 
-function addLBEntry(name,score,level) {
-  const entry = {name:name.trim()||'PILOT',score,level,date:new Date().toLocaleDateString()};
+// ── Profanity Filter ─────────────────────────────────────
+// Common slurs and offensive terms — add more to the list as needed
+const BAD_WORDS = [
+  'fuck','shit','ass','bitch','cunt','dick','cock','pussy','faggot','fag',
+  'nigger','nigga','chink','spic','kike','wetback','retard','whore','slut',
+  'bastard','piss','crap','damn','hell','sex','porn','nazi','rape','kill',
+  'fucker','asshole','motherfucker','bullshit','jackass','dumbass','dipshit',
+  'shithead','fuckhead','goddamn','twat','wanker','tosser','prick','arse',
+  'bollocks','bugger','bloody','hitler','satan','666','homo','tranny',
+];
+
+function containsBadWord(str) {
+  const clean = str.toLowerCase().replace(/[^a-z0-9]/g, '');
+  // Also catch l33tspeak substitutions: 4=a, 3=e, 1=i, 0=o, 5=s
+  const unleet = clean
+    .replace(/4/g,'a').replace(/3/g,'e').replace(/1/g,'i')
+    .replace(/0/g,'o').replace(/5/g,'s').replace(/\$/g,'s');
+  return BAD_WORDS.some(w => clean.includes(w) || unleet.includes(w));
+}
+
+function sanitizeName(raw) {
+  const trimmed = raw.trim().slice(0, 12);
+  if (!trimmed) return 'PILOT';
+  if (containsBadWord(trimmed)) return null; // null = rejected
+  // Strip non-alphanumeric except spaces and hyphens
+  return trimmed.replace(/[^a-zA-Z0-9 \-_]/g, '').trim() || 'PILOT';
+}
+
+function addLBEntry(name,score,level){
+  const clean=sanitizeName(name);
+  if(clean===null){
+    const inp=document.getElementById('nameInput');
+    const err=document.getElementById('nameError');
+    if(inp){inp.style.borderColor='var(--red)';inp.value='';}
+    if(err){err.textContent='⚠ Name not allowed — please choose another';err.style.display='block';}
+    return false;
+  }
+  const entry={name:clean||'PILOT',score,level,diff:currentDiff,date:new Date().toLocaleDateString()};
+  try{localStorage.setItem('mb_pilot',entry.name);}catch(e){}
   leaderboard.push(entry);
   leaderboard.sort((a,b)=>b.score-a.score);
-  if(leaderboard.length>MAX_LB) leaderboard.length=MAX_LB;
+  if(leaderboard.length>MAX_LB)leaderboard.length=MAX_LB;
   saveLB();
   pushOnlineLB(entry);
+  return true;
 }
 function qualifies(score) {
   const all=mergedLB();
@@ -522,7 +582,7 @@ function initGame(){
     p:{x:canvas.width/2,y:canvas.height-60,w:36,h:40,damage:0,dead:false},
     bullets:[],meteors:[],powerups:[],particles:[],explosions:[],bproj:[],
     companions:[], missiles:[],
-    score:0,lives:3,level:1,
+    score:0,lives:DIFF[currentDiff].lives,level:1,
     timer:LEVEL_SECS*1000,quota:0,spawned:0,destroyed:0,
     spawnIv:0,spawnT:0,shootCD:0,
     effects:{},invincible:false,invT:0,boss:null,
@@ -547,9 +607,9 @@ function setupLevel(){
     Music.play('boss');
     showBossIntro(lv);
   } else {
-    GS.quota=METEOR_BASE+(lv-1)*METEOR_GROW;
+    GS.quota=Math.round((METEOR_BASE+(lv-1)*METEOR_GROW)*DIFF[currentDiff].meteorBase/METEOR_BASE);
     GS.spawned=0;
-    GS.spawnIv=Math.max(450,2600-lv*90);
+    GS.spawnIv=Math.max(350, (2600-lv*90)*DIFF[currentDiff].spawnIvMult);
     GS.spawnT=500;
     setBossBar(false);
     phase='playing';
@@ -571,7 +631,8 @@ function showBossIntro(lv){
 }
 function spawnBoss(lv){
   const def=BOSSES[lv];
-  GS.boss={...def,x:canvas.width/2,y:-def.sz,maxHp:def.hp,entering:true,
+  const hp=Math.round(def.hp*DIFF[currentDiff].bossHpMult);
+  GS.boss={...def,x:canvas.width/2,y:-def.sz,maxHp:hp,hp,entering:true,
     targetY:def.sz+25,vx:def.spd,atkT:def.atkRate,phase:1,pulse:0,lv};
 }
 
@@ -595,7 +656,13 @@ function update(dt){
   if(keys['ArrowLeft']||keys['a'])  GS.p.x=Math.max(GS.p.w/2,GS.p.x-moveSpd);
   if(keys['ArrowRight']||keys['d']) GS.p.x=Math.min(canvas.width-GS.p.w/2,GS.p.x+moveSpd);
 
-  const baseCooldown = (GS.effects.rapid?SHOOT_RAPID:SHOOT_NORM)-(GS.upgrades.cooldown||0);
+  // Ultra-rapid = rapid power-up + overclock upgrade stacked
+  const isUltraRapid = GS.effects.rapid && GS.upgrades.overclock;
+  const baseCooldown = isUltraRapid
+    ? Math.max(40, SHOOT_RAPID - (GS.upgrades.cooldown||0) - 30)
+    : GS.effects.rapid
+      ? SHOOT_RAPID - (GS.upgrades.cooldown||0)
+      : SHOOT_NORM  - (GS.upgrades.cooldown||0);
   if((keys[' ']||keys['ArrowUp'])&&GS.shootCD<=0){
     shoot();GS.shootCD=Math.max(60,baseCooldown);
   }
@@ -642,7 +709,7 @@ function updateNormal(dt){
       }
     }
   }
-  if(!GS.invincible){
+  if(!GS.invincible&&!DEV.god&&!DEV.inv){
     for(let mi=GS.meteors.length-1;mi>=0;mi--){
       const m=GS.meteors[mi];
       if(dist(m.x,m.y,GS.p.x,GS.p.y)<m.r+14){
@@ -666,6 +733,7 @@ function updateBoss(dt){
   b.x+=b.vx;if(b.x<b.sz/2||b.x>canvas.width-b.sz/2)b.vx*=-1;
   if(b.final&&b.phase===3)b.x+=(Math.random()-.5)*3;
   b.atkT-=dt;if(b.atkT<=0){bossAttack();b.atkT=b.atkRate;}
+  if(DEV.ohk&&!b.dead)b.hp=Math.min(b.hp,1);
 
   GS.bproj=GS.bproj.filter(p=>p.y<canvas.height+20&&p.x>-20&&p.x<canvas.width+20);
   GS.bproj.forEach(p=>{p.x+=p.vx;p.y+=p.vy;});
@@ -678,7 +746,7 @@ function updateBoss(dt){
       if(b.hp<=0){killBoss();return;}break;
     }
   }
-  if(!GS.invincible){
+  if(!GS.invincible&&!DEV.god&&!DEV.inv){
     for(let pi=GS.bproj.length-1;pi>=0;pi--){
       const p=GS.bproj[pi];
       if(dist(p.x,p.y,GS.p.x,GS.p.y)<p.r+14){
@@ -719,8 +787,35 @@ function killBoss(){
 function shoot(){
   SFX.shoot();
   const{x,y}=GS.p;
-  if(GS.effects.triple||GS.upgrades.tripleShot){GS.bullets.push({x:x-14,y:y-20,vx:-1.5,vy:-10},{x,y:y-24,vx:0,vy:-10},{x:x+14,y:y-20,vx:1.5,vy:-10});}
-  else{GS.bullets.push({x,y:y-24,vx:0,vy:-10});}
+  const hasPUTriple   = !!GS.effects.triple;
+  const hasUpgTriple  = !!GS.upgrades.tripleShot;
+  const hasPURapid    = !!GS.effects.rapid;
+  const hasUpgRapid   = !!GS.upgrades.overclock; // overclock = permanent speed upgrade
+  const spd = 10;
+
+  // ── Stacked: power-up triple ON TOP of permanent triple core
+  // → 5-way spread instead of redundant 3-shot
+  if(hasPUTriple && hasUpgTriple){
+    GS.bullets.push(
+      {x:x-22,y:y-14,vx:-3,  vy:-spd,  color:'#ff9d00'},
+      {x:x-11,y:y-20,vx:-1.2,vy:-spd,  color:'#ffd600'},
+      {x,      y:y-24,vx:0,   vy:-spd,  color:'#ffd600'},
+      {x:x+11,y:y-20,vx:1.2, vy:-spd,  color:'#ffd600'},
+      {x:x+22,y:y-14,vx:3,   vy:-spd,  color:'#ff9d00'}
+    );
+  }
+  // ── Power-up triple only, or upgrade triple only → standard 3-shot
+  else if(hasPUTriple || hasUpgTriple){
+    GS.bullets.push(
+      {x:x-14,y:y-20,vx:-1.5,vy:-spd},
+      {x,      y:y-24,vx:0,   vy:-spd},
+      {x:x+14,y:y-20,vx:1.5, vy:-spd}
+    );
+  }
+  // ── No triple → single shot
+  else{
+    GS.bullets.push({x,y:y-24,vx:0,vy:-spd});
+  }
 }
 function hitPlayer(){
   GS.lives--;SFX.die();
@@ -758,17 +853,19 @@ function shipDeathExplosion(){
 function useShield(){spawnParts(GS.p.x,GS.p.y,'#39ff14',20);addExp(GS.p.x,GS.p.y,'#39ff14');delete GS.effects.shield;GS.invincible=true;GS.invT=600;}
 
 function spawnMeteor(){
-  const lv=GS.level,spd=1.3+lv*0.18,sz=13+Math.random()*22;
+  const lv=GS.level,d=DIFF[currentDiff];
+  const spd=(1.3+lv*0.18)*d.meteorSpd,sz=13+Math.random()*22;
   const hp=sz>28?Math.min(3,1+Math.floor(lv/5)):sz>20?Math.min(2,1+Math.floor(lv/8)):1;
   const cols=['#b46a2e','#8a4e20','#c07030','#7a3d18','#d4854a'];
   GS.meteors.push({x:Math.random()*(canvas.width-sz*2)+sz,y:-sz,r:sz,vx:(Math.random()-.5)*1.6,vy:spd+Math.random()*spd*.8,rot:0,rotSpd:(Math.random()-.5)*.05,color:cols[Math.floor(Math.random()*cols.length)],hp,maxHp:hp});
 }
 function destroyMeteor(mi,m){
-  const mult=1+(GS.upgrades.scoreMult||0);
+  const diff=DIFF[currentDiff];
+  const mult=(1+(GS.upgrades.scoreMult||0))*diff.scoreMult;
   GS.score+=Math.round(m.r*3*mult);GS.destroyed++;
   SFX.explode();spawnParts(m.x,m.y,m.color,18);addExp(m.x,m.y,'#ff6a00');
   GS.meteors.splice(mi,1);
-  if(Math.random()<PU_PROB)spawnPU(m.x,m.y);
+  if(Math.random()<DIFF[currentDiff].puProb)spawnPU(m.x,m.y);
 }
 
 function spawnPU(x,y){
@@ -780,10 +877,48 @@ function spawnPU(x,y){
 }
 function collectPU(type){
   SFX.pu();
+  const bonus = GS.upgrades.puBonus || 0;
+  const dur   = PU_DUR + bonus;
+
   if(type==='bomb'){
+    // Bomb always clears everything regardless
     GS.meteors.forEach(m=>{spawnParts(m.x,m.y,m.color,12);addExp(m.x,m.y,'#ff6a00');GS.score+=Math.round(m.r*2);GS.destroyed++;});
-    GS.meteors=[];if(settings.flash)doFlash('#ff2d5530');
-  } else{GS.effects[type]=PU_DUR+(GS.upgrades.puBonus||0);}
+    GS.meteors=[];
+    if(settings.flash)doFlash('#ff2d5530');
+
+  } else if(type==='triple'){
+    // Already have permanent triple core → upgrade to 5-way by setting 'triple5' flag
+    // If already have power-up triple active, just refresh & extend duration
+    if(GS.upgrades.tripleShot){
+      // Mark as "super triple" so shoot() fires 5-way
+      GS.effects.triple = dur; // still uses same flag — shoot() checks both upgrade + effect
+      announce('5-WAY SPREAD!', 1200);
+    } else {
+      GS.effects.triple = dur;
+    }
+
+  } else if(type==='rapid'){
+    // Overclock upgrade already reduces cooldown permanently.
+    // Stacking rapid power-up on top → push cooldown even lower for duration (ultra-rapid)
+    if(GS.upgrades.overclock){
+      GS.effects.rapid = dur;
+      announce('ULTRA RAPID!', 1200);
+    } else {
+      GS.effects.rapid = dur;
+    }
+
+  } else if(type==='shield'){
+    // Auto-shield upgrade means shield is always present — power-up refreshes + extends it
+    if(GS.upgrades.autoShield){
+      GS.effects.shield = Math.max(GS.effects.shield||0, dur) + dur;
+      announce('SHIELD EXTENDED!', 1200);
+    } else {
+      GS.effects.shield = dur;
+    }
+
+  } else {
+    GS.effects[type] = dur;
+  }
 }
 
 function spawnParts(x,y,color,n){
@@ -1054,21 +1189,28 @@ function triggerGameOver(){
   cancelAnimationFrame(animId);animId=0;
   document.getElementById('goScore').textContent=GS.score;
   document.getElementById('goLevel').textContent=GS.level;
-  if(qualifies(GS.score))showNameEntry(GS.score,GS.level,()=>showScreen('gameOver'));
-  else showScreen('gameOver');
+  if(!DEV.used&&qualifies(GS.score))showNameEntry(GS.score,GS.level,()=>showScreen('gameOver'));
+  else{if(DEV.used)announce('DEV RUN — score not saved',2400);showScreen('gameOver');}
 }
 function triggerVictory(){
   phase='victory';Music.play('victory');
   cancelAnimationFrame(animId);animId=0;
   document.getElementById('vicScore').textContent=GS.score;
   if(settings.flash)doFlash('#ffd60055');
-  showNameEntry(GS.score,MAX_LEVELS,()=>showScreen('victory'));
+  if(!DEV.used)showNameEntry(GS.score,MAX_LEVELS,()=>showScreen('victory'));
+  else{announce('DEV RUN — score not saved',2400);setTimeout(()=>showScreen('victory'),800);}
 }
 function showNameEntry(score,level,cb){
   document.getElementById('entryScore').textContent=score;
   document.getElementById('nameInput').value='';
   showScreen('nameEntry');
-  document.getElementById('submitBtn').onclick=()=>{addLBEntry(document.getElementById('nameInput').value,score,level);cb();};
+  document.getElementById('nameInput').style.borderColor='';
+  const errEl=document.getElementById('nameError');
+  if(errEl) errEl.style.display='none';
+  document.getElementById('submitBtn').onclick=()=>{
+    const ok=addLBEntry(document.getElementById('nameInput').value,score,level);
+    if(ok!==false) cb();
+  };
 }
 
 // ── Leaderboard ──────────────────────────────────────
@@ -1076,14 +1218,21 @@ async function renderLB(){
   const el=document.getElementById('lbList');
   el.innerHTML='<div class="lb-empty">Loading scores…</div>';
   await fetchOnlineLB();
-  const all=mergedLB();
-  if(!all.length){el.innerHTML='<div class="lb-empty">No scores yet. Be the first!</div>';return;}
+  let all=mergedLB();
+  // Apply "my scores" filter
+  const myPilot=(()=>{try{return localStorage.getItem('mb_pilot');}catch(e){return null;}})();
+  if(lbFilter==='mine'&&myPilot) all=all.filter(e=>e.name===myPilot);
+  // Apply difficulty filter
+  if(lbDiffFilter!=='all') all=all.filter(e=>(e.diff||'normal')===lbDiffFilter);
+  if(!all.length){el.innerHTML='<div class="lb-empty">'+(lbFilter==='mine'?'No scores found for your pilot name.':'No scores yet. Be the first!')+'</div>';return;}
   const onlineNote=ONLINE_BOARD?'<div class="lb-online-note">🌐 Global Leaderboard</div>':'<div class="lb-online-note local">💾 Local Scores Only</div>';
+  const diffBadge=d=>d?`<span class="lb-diff-badge ${d||'normal'}">${(d||'NRM').toUpperCase().slice(0,3)}</span>`:'';
   el.innerHTML=onlineNote+all.map((e,i)=>`
     <div class="lb-row ${['gold','silver','bronze'][i]||''}">
-      <span class="lb-rank">${['🥇','🥈','🥉'][i]||`#${i+1}`}</span>
+      <span class="lb-rank">${['🥇','🥈','🥉'][i]||'#'+(i+1)}</span>
       <span class="lb-name">${e.name}</span>
       <span class="lb-score">${Number(e.score).toLocaleString()}</span>
+      ${diffBadge(e.diff)}
       <span class="lb-level">LV${e.level}</span>
     </div>`).join('');
 }
@@ -1112,6 +1261,8 @@ function togglePause(){
 
 // ── HUD ──────────────────────────────────────────────
 function updateHUD(){
+  const devWarn=document.getElementById('devWarnHUD');
+  if(devWarn) devWarn.style.display=DEV.used?'block':'none';
   document.getElementById('scoreDisplay').textContent=GS.score.toLocaleString();
   document.getElementById('levelDisplay').textContent=`${GS.level} / ${MAX_LEVELS}`;
   document.getElementById('livesDisplay').textContent='♥'.repeat(Math.max(0,GS.lives));
@@ -1153,7 +1304,11 @@ function draw(){
   GS.bproj.forEach(p=>{ctx.save();ctx.shadowColor=p.color;ctx.shadowBlur=14;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();ctx.restore();});
   GS.powerups.forEach(drawPU);
   drawMissiles();
-  GS.bullets.forEach(b=>{ctx.save();ctx.shadowColor=b.companion?'#00c8ff':'#ffd600';ctx.shadowBlur=10;ctx.fillStyle=b.companion?'#00c8ff':'#ffd600';ctx.beginPath();ctx.ellipse(b.x,b.y,3,8,0,0,Math.PI*2);ctx.fill();ctx.restore();});
+  GS.bullets.forEach(b=>{
+    const col=b.companion?'#00c8ff':b.color||'#ffd600';
+    ctx.save();ctx.shadowColor=col;ctx.shadowBlur=10;ctx.fillStyle=col;
+    ctx.beginPath();ctx.ellipse(b.x,b.y,3,8,0,0,Math.PI*2);ctx.fill();ctx.restore();
+  });
   drawCompanions();
   drawPlayer();
 }
@@ -1309,6 +1464,7 @@ canvas.addEventListener('touchend',()=>{keys[' ']=false;touchX=null;});
 function startFresh(){
   Music.resume();getAC();
   cancelAnimationFrame(animId);animId=0;
+  DEV.used=false;DEV.god=false;DEV.inv=false;DEV.ohk=false;
   initGame();showScreen('game');announce('LEVEL 1');
   updateUpgradeBar();
   lastTs=0;animId=requestAnimationFrame(gameLoop);
@@ -1331,6 +1487,294 @@ document.getElementById('pauseSettingsBtn').onclick=()=>{hideOv('pause');prevPha
 document.getElementById('quitBtn').onclick=()=>{cancelAnimationFrame(animId);animId=0;hideOv('pause');phase='start';Music.play('menu');showScreen('start');};
 document.getElementById('goMenuBtn').onclick=()=>{phase='start';Music.play('menu');showScreen('start');};
 document.getElementById('vicMenuBtn').onclick=()=>{phase='start';Music.play('menu');showScreen('start');};
+
+// ═══════════════════════════════════════════════════════════
+//   DEVELOPER CONSOLE
+// ═══════════════════════════════════════════════════════════
+const DEV = { god:false, inv:false, ohk:false, used:false };
+let devUnlocked = false;
+
+// Secret unlock: type "DEV" on keyboard anywhere
+let devSeq='';
+document.addEventListener('keypress',e=>{
+  devSeq=(devSeq+e.key).slice(-3);
+  if(devSeq.toUpperCase()==='DEV'){
+    devUnlocked=true;
+    devLog('🔓 Dev console unlocked — press ` (backtick) to open');
+  }
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='`'&&devUnlocked){
+    if(document.getElementById('devOverlay').classList.contains('hidden')){
+      if(phase==='playing'||phase==='bossActive'){prePause=phase;phase='paused';}
+      showOv('dev');
+    } else hideOv('dev');
+  }
+});
+
+function devLog(msg){
+  const log=document.getElementById('devLog'); if(!log)return;
+  const line=document.createElement('div');line.className='dev-log-line';
+  line.textContent='> '+msg; log.appendChild(line);
+  log.scrollTop=log.scrollHeight;
+  if(log.children.length>20)log.removeChild(log.firstChild);
+}
+function devToggle(key){
+  if(key!=='inv'&&key!=='god') DEV.used=true; else DEV.used=true;
+  DEV[key]=!DEV[key];
+  const el=document.getElementById(key+'Toggle');
+  if(el){el.textContent=DEV[key]?'ON':'OFF';el.classList.toggle('off',!DEV[key]);}
+  if(key==='god'&&DEV.god){GS.lives=DIFF[currentDiff].lives;GS.p.damage=0;updateHUD();}
+  devLog(`${key.toUpperCase()} mode ${DEV[key]?'enabled':'disabled'}`);
+}
+function devJumpLevel(){
+  DEV.used=true;
+  const n=parseInt(document.getElementById('devLvInput').value);
+  if(!n||n<1||n>MAX_LEVELS){devLog('Invalid level');return;}
+  hideOv('dev');GS.level=n;
+  GS.effects={};GS.boss=null;
+  setupLevel();if(phase==='playing'){showScreen('game');announce(`JUMP → LEVEL ${n}`);}
+  devLog(`Jumped to level ${n}`);
+}
+function devSkipLevel(){
+  DEV.used=true;
+  hideOv('dev');
+  if(phase==='playing') levelDone();
+  else if(phase==='bossActive'){if(GS.boss)killBoss();}
+  devLog('Level skipped');
+}
+function devKillAll(){
+  GS.meteors.forEach(m=>{spawnParts(m.x,m.y,m.color,8);addExp(m.x,m.y,'#ff6a00');});
+  GS.meteors=[];devLog('All meteors cleared');
+}
+function devKillBoss(){
+  DEV.used=true;
+  if(GS.boss&&!GS.boss.dead){killBoss();devLog('Boss defeated');}
+  else devLog('No active boss');
+}
+function devAddLife(){
+  DEV.used=true;
+  GS.lives=Math.min(GS.lives+1,9);GS.p.damage=Math.max(0,3-GS.lives);updateHUD();devLog('+1 life → '+GS.lives);
+}
+function devAddScore(){
+  DEV.used=true;
+  GS.score+=5000;updateHUD();devLog('+5000 score → '+GS.score);
+}
+function devAllPU(){
+  DEV.used=true;
+  ['rapid','triple','shield'].forEach(t=>{GS.effects[t]=30000;});
+  devLog('All power-ups granted (30s)');updatePUBar();
+}
+function devAllUpgrades(){
+  DEV.used=true;
+  const up=id=>{GS.pickedUpgrades[id]=(GS.pickedUpgrades[id]||0)+1;};
+  SUPPORT_POOL.forEach(u=>{if((GS.pickedUpgrades[u.id]||0)<u.maxStack){up(u.id);u.apply(GS);}});
+  updateUpgradeBar();devLog('All upgrades granted');
+}
+function devSpawnMeteor(){
+  for(let i=0;i<5;i++)spawnMeteor();devLog('5 meteors spawned');
+}
+function devSpawnPU(){
+  const cx=GS.p.x+(Math.random()-.5)*200,cy=GS.p.y-100;
+  spawnPU(cx,cy);devLog('Power-up spawned');
+}
+function devAddComp(){
+  if(GS.companions.length<3){
+    GS.companions.push({slot:GS.companions.length,x:GS.p.x,y:GS.p.y,shootCD:0,pulse:0});
+    GS.pickedUpgrades.companion=(GS.pickedUpgrades.companion||0)+1;
+    updateUpgradeBar();devLog('Companion added → '+GS.companions.length);
+  } else devLog('Max companions reached (3)');
+}
+function devTriggerBoss(){
+  DEV.used=true;
+  const lv=BOSS_LEVELS.has(GS.level)?GS.level:[...BOSS_LEVELS].find(l=>l>=GS.level)||5;
+  hideOv('dev');GS.boss=null;GS.bproj=[];
+  phase='bossIntro';Music.play('boss');showBossIntro(lv);devLog(`Boss triggered for level ${lv}`);
+}
+// Override hitPlayer to respect god/inv
+const _origHitPlayer=window.hitPlayer;
+
+// Patch invincibility into collision checks via wrapper
+const _devGuardHit=()=>{ if(DEV.god||DEV.inv)return; hitPlayer(); };
+// Also one-hit-kill bosses
+window.devCheckOHK=()=>{ if(DEV.ohk&&GS.boss&&!GS.boss.dead){GS.boss.hp=1;} };
+window.devToggle=devToggle;
+window.devJumpLevel=devJumpLevel;
+window.devSkipLevel=devSkipLevel;
+window.devKillAll=devKillAll;
+window.devKillBoss=devKillBoss;
+window.devAddLife=devAddLife;
+window.devAddScore=devAddScore;
+window.devAllPU=devAllPU;
+window.devAllUpgrades=devAllUpgrades;
+window.devSpawnMeteor=devSpawnMeteor;
+window.devSpawnPU=devSpawnPU;
+window.devAddComp=devAddComp;
+window.devTriggerBoss=devTriggerBoss;
+
+// ── Dev Console Tabs ─────────────────────────────────────
+function devTab(name){
+  document.getElementById('devPanelGame').classList.toggle('hidden', name!=='game');
+  document.getElementById('devPanelLB').classList.toggle('hidden', name!=='lb');
+  document.getElementById('dtGame').classList.toggle('active', name==='game');
+  document.getElementById('dtLB').classList.toggle('active', name==='lb');
+  if(name==='lb') devLBRefresh();
+}
+window.devTab=devTab;
+
+// ── Dev Leaderboard Management ───────────────────────────
+// We store hidden entries separately so they can be restored
+let lbHidden=[];
+try{ const h=localStorage.getItem('mb_lb_hidden'); if(h) lbHidden=JSON.parse(h); }catch(e){}
+function saveLBHidden(){ try{localStorage.setItem('mb_lb_hidden',JSON.stringify(lbHidden));}catch(e){} }
+
+function devLBRefresh(){
+  const table=document.getElementById('devLBTable');
+  if(!table) return;
+  const src=document.getElementById('devLBSource')?.value||'local';
+  const search=(document.getElementById('devLBSearch')?.value||'').toLowerCase().trim();
+  let entries=src==='all'?mergedLB():[...leaderboard];
+  if(search) entries=entries.filter(e=>e.name.toLowerCase().includes(search));
+
+  if(!entries.length&&!lbHidden.length){
+    table.innerHTML='<div class="dev-lb-empty">No entries found</div>'; return;
+  }
+
+  const diffBadge=d=>`<span class="dev-lb-badge ${d||'normal'}">${(d||'NRM').slice(0,3).toUpperCase()}</span>`;
+
+  // Active entries
+  let html=entries.map((e,i)=>`
+    <div class="dev-lb-row" id="devlbr_${i}">
+      <span class="dev-lb-idx">#${i+1}</span>
+      <input class="dev-lb-name-input" value="${e.name}" id="devlbn_${i}" title="Edit name"/>
+      <input class="dev-lb-score-input" value="${e.score}" id="devlbs_${i}" title="Edit score" type="number"/>
+      ${diffBadge(e.diff)}
+      <span style="font-family:'Share Tech Mono',monospace;font-size:.6rem;color:var(--dim)">${e.level?'LV'+e.level:''}</span>
+      <button class="dev-lb-icon-btn save" onclick="devLBSave(${i})" title="Save changes">✓</button>
+      <button class="dev-lb-icon-btn hide" onclick="devLBHide(${i})" title="Hide (temporary)">◌</button>
+      <button class="dev-lb-icon-btn del" onclick="devLBDelete(${i})" title="Delete permanently">✕</button>
+    </div>`).join('');
+
+  // Hidden entries (shown as ghost rows)
+  if(lbHidden.length){
+    html+=`<div style="font-family:'Share Tech Mono',monospace;font-size:.6rem;color:var(--dim);letter-spacing:3px;padding:8px 4px 4px">HIDDEN (${lbHidden.length})</div>`;
+    html+=lbHidden.map((e,i)=>`
+      <div class="dev-lb-row hidden-row">
+        <span class="dev-lb-idx">–</span>
+        <span style="color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:.68rem">${e.name}</span>
+        <span style="color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:.68rem;text-align:right">${Number(e.score).toLocaleString()}</span>
+        ${diffBadge(e.diff)}
+        <span style="font-family:'Share Tech Mono',monospace;font-size:.6rem;color:var(--dim)">${e.level?'LV'+e.level:''}</span>
+        <button class="dev-lb-icon-btn restore" onclick="devLBRestoreOne(${i})" title="Restore">↩</button>
+        <button class="dev-lb-icon-btn del" onclick="devLBDeleteHidden(${i})" title="Delete permanently">✕</button>
+      </div>`).join('');
+  }
+
+  table.innerHTML=html;
+}
+
+function devLBSave(i){
+  const nameEl=document.getElementById(`devlbn_${i}`);
+  const scoreEl=document.getElementById(`devlbs_${i}`);
+  if(!nameEl||!scoreEl) return;
+  const rawName=nameEl.value.trim()||leaderboard[i].name;
+  const newName=sanitizeName(rawName);
+  if(newName===null){ devLog(`Save rejected: "${rawName}" contains inappropriate language`); return; }
+  const newScore=parseInt(scoreEl.value)||leaderboard[i].score;
+  const old={...leaderboard[i]};
+  leaderboard[i].name=newName;
+  leaderboard[i].score=newScore;
+  leaderboard.sort((a,b)=>b.score-a.score);
+  saveLB();
+  devLog(`Saved: "${old.name}" → "${newName}", ${old.score} → ${newScore}`);
+  devLBRefresh();
+}
+
+function devLBHide(i){
+  if(i<0||i>=leaderboard.length) return;
+  const entry=leaderboard.splice(i,1)[0];
+  lbHidden.push(entry);
+  saveLB(); saveLBHidden();
+  devLog(`Hidden: "${entry.name}" (${entry.score}) — restore anytime`);
+  devLBRefresh();
+}
+
+function devLBDelete(i){
+  if(i<0||i>=leaderboard.length) return;
+  const entry=leaderboard.splice(i,1)[0];
+  saveLB();
+  devLog(`Deleted permanently: "${entry.name}" (${entry.score})`);
+  devLBRefresh();
+}
+
+function devLBRestoreOne(i){
+  if(i<0||i>=lbHidden.length) return;
+  const entry=lbHidden.splice(i,1)[0];
+  leaderboard.push(entry);
+  leaderboard.sort((a,b)=>b.score-a.score);
+  if(leaderboard.length>MAX_LB) leaderboard.length=MAX_LB;
+  saveLB(); saveLBHidden();
+  devLog(`Restored: "${entry.name}" (${entry.score})`);
+  devLBRefresh();
+}
+
+function devLBDeleteHidden(i){
+  if(i<0||i>=lbHidden.length) return;
+  const entry=lbHidden.splice(i,1)[0];
+  saveLBHidden();
+  devLog(`Deleted hidden entry permanently: "${entry.name}"`);
+  devLBRefresh();
+}
+
+function devLBRestoreHidden(){
+  if(!lbHidden.length){ devLog('No hidden entries to restore'); return; }
+  lbHidden.forEach(e=>leaderboard.push(e));
+  lbHidden=[];
+  leaderboard.sort((a,b)=>b.score-a.score);
+  if(leaderboard.length>MAX_LB) leaderboard.length=MAX_LB;
+  saveLB(); saveLBHidden();
+  devLog(`Restored all hidden entries`);
+  devLBRefresh();
+}
+
+function devLBClearAll(){
+  if(!leaderboard.length){ devLog('Leaderboard already empty'); return; }
+  const count=leaderboard.length;
+  // Move all to hidden so they can be recovered
+  lbHidden.push(...leaderboard);
+  leaderboard=[];
+  saveLB(); saveLBHidden();
+  devLog(`Cleared ${count} entries (moved to hidden — use Restore Hidden to recover)`);
+  devLBRefresh();
+}
+
+function devLBAddDummy(){
+  const names=['ACE','NOVA','BLAZE','ECHO','VIPER','ZERO','FLUX'];
+  const diffs=['easy','normal','hard'];
+  const entry={
+    name:names[Math.floor(Math.random()*names.length)]+Math.floor(Math.random()*99),
+    score:Math.floor(Math.random()*50000)+1000,
+    level:Math.floor(Math.random()*20)+1,
+    diff:diffs[Math.floor(Math.random()*diffs.length)],
+    date:new Date().toLocaleDateString()
+  };
+  leaderboard.push(entry);
+  leaderboard.sort((a,b)=>b.score-a.score);
+  if(leaderboard.length>MAX_LB) leaderboard.length=MAX_LB;
+  saveLB();
+  devLog(`Added test entry: ${entry.name} — ${entry.score}`);
+  devLBRefresh();
+}
+
+window.devLBRefresh=devLBRefresh;
+window.devLBSave=devLBSave;
+window.devLBHide=devLBHide;
+window.devLBDelete=devLBDelete;
+window.devLBRestoreOne=devLBRestoreOne;
+window.devLBDeleteHidden=devLBDeleteHidden;
+window.devLBRestoreHidden=devLBRestoreHidden;
+window.devLBClearAll=devLBClearAll;
+window.devLBAddDummy=devLBAddDummy;
 
 // ── Boot ─────────────────────────────────────────────
 loadPersist();resize();showScreen('start');

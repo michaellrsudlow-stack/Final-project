@@ -16,6 +16,14 @@
     <div class="title-eyebrow">★ EARTH DEFENSE FORCE ★</div>
     <h1 class="game-title">METEOR<br><span>BLASTER</span></h1>
     <div class="menu-btns">
+      <div class="diff-select">
+        <div class="diff-label">DIFFICULTY</div>
+        <div class="diff-btns">
+          <button class="diff-btn" id="dEasy"   onclick="setDiff('easy')">EASY</button>
+          <button class="diff-btn active" id="dNormal" onclick="setDiff('normal')">NORMAL</button>
+          <button class="diff-btn" id="dHard"   onclick="setDiff('hard')">HARD</button>
+        </div>
+      </div>
       <button class="btn-primary" id="startBtn">LAUNCH MISSION</button>
       <button class="btn-secondary" id="lbBtn">🏆 LEADERBOARD</button>
       <button class="btn-secondary" id="settingsBtn">⚙ SETTINGS</button>
@@ -35,6 +43,18 @@
   <div class="sc">
     <h2 class="screen-title">🏆 LEADERBOARD</h2>
     <div id="lbStatus" class="lb-status"></div>
+    <div class="lb-controls">
+      <div class="lb-filter-btns">
+        <button class="lb-filter active" id="lbAllBtn"  onclick="setLBFilter('all')">ALL SCORES</button>
+        <button class="lb-filter"        id="lbMineBtn" onclick="setLBFilter('mine')">MY SCORES</button>
+      </div>
+      <div class="lb-diff-filter">
+        <button class="lb-filter active" id="lbDiffAll"  onclick="setLBDiff('all')">ALL</button>
+        <button class="lb-filter"        id="lbDiffEasy" onclick="setLBDiff('easy')">EASY</button>
+        <button class="lb-filter"        id="lbDiffNorm" onclick="setLBDiff('normal')">NORMAL</button>
+        <button class="lb-filter"        id="lbDiffHard" onclick="setLBDiff('hard')">HARD</button>
+      </div>
+    </div>
     <div id="lbList" class="lb-list"></div>
     <button class="btn-secondary" id="lbBackBtn">← BACK</button>
   </div>
@@ -90,6 +110,7 @@
     <div class="end-stat" id="entryScore">0</div>
     <p class="name-prompt">Enter your pilot name:</p>
     <input type="text" id="nameInput" class="name-input" maxlength="12" placeholder="PILOT"/>
+    <div id="nameError" style="display:none;font-family:'Share Tech Mono',monospace;font-size:.75rem;color:var(--red);letter-spacing:1px"></div>
     <button class="btn-primary" id="submitBtn">SUBMIT</button>
   </div>
 </div>
@@ -101,6 +122,7 @@
     <div class="hud-block center"><div class="hl">LEVEL</div><div class="hv" id="levelDisplay">1 / 20</div></div>
     <div class="hud-block"><div class="hl">TIME</div><div class="hv" id="timerDisplay">2:20</div></div>
     <div class="hud-block"><div class="hl">LIVES</div><div class="hv red" id="livesDisplay">♥♥♥</div></div>
+    <div id="devWarnHUD" style="display:none;font-family:'Share Tech Mono',monospace;font-size:.65rem;color:#ffd600;letter-spacing:3px;padding:2px 10px;background:rgba(255,214,0,.1);border:1px solid rgba(255,214,0,.3);border-radius:4px;animation:blink .8s step-end infinite">⚠ DEV RUN</div>
     <button class="icon-btn" id="pauseBtn" title="Pause (Esc)">⏸</button>
   </div>
   <div id="bossBar" class="hidden">
@@ -153,6 +175,83 @@
     <div class="bi-name" id="biName">GRANITE GUARDIAN</div>
     <div class="bi-sub" id="biSub">The Ancient Destroyer</div>
     <div class="bi-bar"><div class="bi-fill" id="biFill"></div></div>
+  </div>
+</div>
+
+
+<!-- ═══ DEV CONSOLE ═══ -->
+<div id="devOverlay" class="overlay hidden">
+  <div class="ov-box dev-box">
+    <div class="dev-header">
+      <span class="dev-badge">DEV</span>
+      <h2 class="ov-title" style="font-size:1.2rem;letter-spacing:3px">DEVELOPER CONSOLE</h2>
+      <button class="icon-btn" onclick="hideOv('dev')" style="margin-left:auto">✕</button>
+    </div>
+    <div class="dev-tabs">
+      <button class="dev-tab active" id="dtGame"   onclick="devTab('game')">GAME</button>
+      <button class="dev-tab"        id="dtLB"     onclick="devTab('lb')">LEADERBOARD</button>
+    </div>
+
+    <!-- GAME PANEL -->
+    <div id="devPanelGame" class="dev-panel">
+      <div class="dev-grid">
+        <div class="dev-section">
+          <div class="dev-section-title">GAME STATE</div>
+          <div class="dev-row"><span>God Mode</span><button class="toggle" id="godToggle" onclick="devToggle('god')">OFF</button></div>
+          <div class="dev-row"><span>Invincible</span><button class="toggle" id="invToggle" onclick="devToggle('inv')">OFF</button></div>
+          <div class="dev-row"><span>One-Hit Kill</span><button class="toggle" id="ohkToggle" onclick="devToggle('ohk')">OFF</button></div>
+        </div>
+        <div class="dev-section">
+          <div class="dev-section-title">LEVEL CONTROL</div>
+          <div class="dev-row">
+            <span>Jump to Level</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input type="number" id="devLvInput" class="dev-input" min="1" max="20" value="1"/>
+              <button class="dev-action-btn" onclick="devJumpLevel()">GO</button>
+            </div>
+          </div>
+          <div class="dev-row"><span>Skip Level</span><button class="dev-action-btn" onclick="devSkipLevel()">SKIP →</button></div>
+          <div class="dev-row"><span>Kill All Meteors</span><button class="dev-action-btn" onclick="devKillAll()">CLEAR</button></div>
+          <div class="dev-row"><span>Kill Boss</span><button class="dev-action-btn" onclick="devKillBoss()">KILL</button></div>
+        </div>
+        <div class="dev-section">
+          <div class="dev-section-title">RESOURCES</div>
+          <div class="dev-row"><span>Add Life</span><button class="dev-action-btn" onclick="devAddLife()">+1 ♥</button></div>
+          <div class="dev-row"><span>Add Score</span><button class="dev-action-btn" onclick="devAddScore()">+5000</button></div>
+          <div class="dev-row"><span>All Power-ups</span><button class="dev-action-btn" onclick="devAllPU()">GRANT</button></div>
+          <div class="dev-row"><span>All Upgrades</span><button class="dev-action-btn" onclick="devAllUpgrades()">GRANT</button></div>
+        </div>
+        <div class="dev-section">
+          <div class="dev-section-title">SPAWN</div>
+          <div class="dev-row"><span>Spawn Meteor</span><button class="dev-action-btn" onclick="devSpawnMeteor()">SPAWN</button></div>
+          <div class="dev-row"><span>Spawn Power-up</span><button class="dev-action-btn" onclick="devSpawnPU()">SPAWN</button></div>
+          <div class="dev-row"><span>Add Companion</span><button class="dev-action-btn" onclick="devAddComp()">ADD 🛸</button></div>
+          <div class="dev-row"><span>Trigger Boss</span><button class="dev-action-btn" onclick="devTriggerBoss()">BOSS ⚠</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEADERBOARD PANEL -->
+    <div id="devPanelLB" class="dev-panel hidden">
+      <div class="dev-lb-toolbar">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="dev-action-btn" onclick="devLBRefresh()">↻ REFRESH</button>
+          <button class="dev-action-btn danger" onclick="devLBClearAll()">✕ CLEAR ALL</button>
+          <button class="dev-action-btn" onclick="devLBAddDummy()">+ ADD TEST ENTRY</button>
+          <button class="dev-action-btn" onclick="devLBRestoreHidden()">↩ RESTORE HIDDEN</button>
+        </div>
+        <div class="dev-lb-search-row">
+          <input type="text" id="devLBSearch" class="dev-input" style="width:140px" placeholder="Search name…" oninput="devLBRefresh()"/>
+          <select id="devLBSource" class="dev-input" onchange="devLBRefresh()" style="width:110px">
+            <option value="local">Local only</option>
+            <option value="all">All (merged)</option>
+          </select>
+        </div>
+      </div>
+      <div id="devLBTable" class="dev-lb-table"></div>
+    </div>
+
+    <div id="devLog" class="dev-log"></div>
   </div>
 </div>
 
