@@ -32,6 +32,9 @@ const BOSSES = {
 
 // ── Difficulty ────────────────────────────────────────────
 let currentDiff = 'normal';
+let endlessMode  = false;   // true when playing endless
+let endlessWave  = 1;       // endless wave counter (goes beyond 20)
+
 const DIFF = {
   easy:   { lives:5, meteorSpd:0.7, meteorBase:8,  meteorGrow:2, bossHpMult:0.6, puProb:0.38, spawnIvMult:1.4, label:'EASY',   scoreMult:0.75 },
   normal: { lives:3, meteorSpd:1.0, meteorBase:12, meteorGrow:3, bossHpMult:1.0, puProb:0.26, spawnIvMult:1.0, label:'NORMAL', scoreMult:1.0  },
@@ -49,7 +52,7 @@ window.setDiff=setDiff;
 // ── Leaderboard filter state ──────────────────────────────
 let lbFilter='all', lbDiffFilter='all';
 function setLBFilter(f){ lbFilter=f; document.getElementById('lbAllBtn').classList.toggle('active',f==='all'); document.getElementById('lbMineBtn').classList.toggle('active',f==='mine'); renderLB(); }
-function setLBDiff(d){ lbDiffFilter=d; ['All','Easy','Norm','Hard'].forEach(k=>{ const el=document.getElementById('lbDiff'+k); if(el) el.classList.toggle('active', (d==='normal'?'norm':d)===k.toLowerCase()||(d==='all'&&k==='All')); }); renderLB(); }
+function setLBDiff(d){ lbDiffFilter=d; ['All','Easy','Norm','Hard','End'].forEach(k=>{ const el=document.getElementById('lbDiff'+k); if(el) el.classList.toggle('active', d===k.toLowerCase()||(d==='normal'&&k==='Norm')||(d==='endless'&&k==='End')||(d==='all'&&k==='All')); }); renderLB(); }
 window.setLBFilter=setLBFilter; window.setLBDiff=setLBDiff;
 
 
@@ -479,7 +482,7 @@ function addLBEntry(name,score,level){
     if(err){err.textContent='⚠ Name not allowed — please choose another';err.style.display='block';}
     return false;
   }
-  const entry={name:clean||'PILOT',score,level,diff:currentDiff,date:new Date().toLocaleDateString()};
+  const entry={name:clean||'PILOT',score,level,diff:endlessMode?'endless':currentDiff,date:new Date().toLocaleDateString()};
   try{localStorage.setItem('mb_pilot',entry.name);}catch(e){}
   leaderboard.push(entry);
   leaderboard.sort((a,b)=>b.score-a.score);
@@ -578,11 +581,12 @@ const SFX={
 // ── Init ─────────────────────────────────────────────
 function initGame(){
   resize();
+  endlessWave=1;
   GS={
     p:{x:canvas.width/2,y:canvas.height-60,w:36,h:40,damage:0,dead:false},
     bullets:[],meteors:[],powerups:[],particles:[],explosions:[],bproj:[],
     companions:[], missiles:[],
-    score:0,lives:DIFF[currentDiff].lives,level:1,
+    score:0,lives:endlessMode?3:DIFF[currentDiff].lives,level:1,
     timer:LEVEL_SECS*1000,quota:0,spawned:0,destroyed:0,
     spawnIv:0,spawnT:0,shootCD:0,
     effects:{},invincible:false,invT:0,boss:null,
@@ -593,23 +597,34 @@ function initGame(){
 
 function setupLevel(){
   const lv=GS.level;
+  const wave=endlessMode?endlessWave:lv; // use endlessWave for scaling in endless
   GS.bullets=[];GS.meteors=[];GS.powerups=[];GS.bproj=[];GS.missiles=[];
   GS.timer=LEVEL_SECS*1000;GS.destroyed=0;
   // Apply auto-shield upgrade
   if(GS.upgrades.autoShield) GS.effects.shield=PU_DUR+(GS.upgrades.puBonus||0);
-  // Reactor: regen 1 life every 3rd boss
-  if(GS.upgrades.reactor && BOSS_LEVELS.has(lv) && lv%3===0 && GS.lives<3){
-    GS.lives=Math.min(3,GS.lives+1); GS.p.damage=3-GS.lives;
+  // Reactor: regen 1 life every 3rd boss (endless: every 3rd boss wave)
+  const isBossWave = endlessMode && (endlessWave % 5 === 0);
+  if(GS.upgrades.reactor && isBossWave && (endlessMode?endlessWave:lv)%3===0 && GS.lives<(endlessMode?3:DIFF[currentDiff].lives)+3){
+    GS.lives=Math.min(GS.lives+1,(endlessMode?3:DIFF[currentDiff].lives)+3); GS.p.damage=Math.max(0,GS.p.damage-1);
   }
-  if(BOSS_LEVELS.has(lv)){
+
+  if(isBossWave){
     GS.quota=0;GS.spawned=0;
     phase='bossIntro';
     Music.play('boss');
-    showBossIntro(lv);
+    if(endlessMode){
+      showEndlessBossIntro(endlessWave);
+    } else {
+      showBossIntro(lv);
+    }
   } else {
-    GS.quota=Math.round((METEOR_BASE+(lv-1)*METEOR_GROW)*DIFF[currentDiff].meteorBase/METEOR_BASE);
+    // Scaling: endless escalates indefinitely past normal cap
+    const scaledWave=endlessMode?endlessWave:lv;
+    const diffMod=endlessMode?1:DIFF[currentDiff].meteorBase/METEOR_BASE;
+    GS.quota=Math.round((METEOR_BASE+(scaledWave-1)*METEOR_GROW)*diffMod);
     GS.spawned=0;
-    GS.spawnIv=Math.max(350, (2600-lv*90)*DIFF[currentDiff].spawnIvMult);
+    const ivMult=endlessMode?Math.max(0.4,1-endlessWave*0.02):DIFF[currentDiff].spawnIvMult;
+    GS.spawnIv=Math.max(280, (2600-scaledWave*90)*ivMult);
     GS.spawnT=500;
     setBossBar(false);
     phase='playing';
@@ -629,6 +644,34 @@ function showBossIntro(lv){
   showScreen('game');showOv('bossIntro');
   setTimeout(()=>{hideOv('bossIntro');spawnBoss(lv);phase='bossActive';setBossBar(true);updateHUD();},3100);
 }
+
+// ── Endless Boss Intro (cycles through bosses, scales HP) ─
+function showEndlessBossIntro(wave){
+  SFX.bossWarn();
+  const tier=[5,10,15,20];
+  const def=BOSSES[tier[(Math.floor((wave/5)-1))%4]];
+  document.getElementById('biName').textContent=def.name;
+  const tierNum=Math.floor((wave/5-1)/4)+1;
+  document.getElementById('biSub').textContent=tierNum>1?`Tier ${tierNum} — ${def.sub}`:def.sub;
+  const fill=document.getElementById('biFill');
+  fill.style.animation='none';void fill.offsetWidth;fill.style.animation='biLoad 2.8s linear forwards';
+  showScreen('game');showOv('bossIntro');
+  setTimeout(()=>{hideOv('bossIntro');spawnEndlessBoss(wave);phase='bossActive';setBossBar(true);updateHUD();},3100);
+}
+
+function spawnEndlessBoss(wave){
+  const tier=[5,10,15,20];
+  const def=BOSSES[tier[(Math.floor((wave/5)-1))%4]];
+  const scaleMult=1+Math.floor((wave/5-1)/4)*0.6; // each full cycle +60% HP
+  const hp=Math.round(def.hp*scaleMult);
+  const sz=Math.min(def.sz+Math.floor(wave/20)*8,140);
+  GS.boss={...def,x:canvas.width/2,y:-sz,sz,maxHp:hp,hp,entering:true,
+    targetY:sz+25,vx:def.spd+wave*0.04,atkT:Math.max(600,def.atkRate-wave*30),
+    shots:Math.min(def.shots+Math.floor(wave/10),12),
+    shotSpd:Math.min(def.shotSpd+wave*0.05,8),
+    phase:1,pulse:0,lv:tier[(Math.floor((wave/5)-1))%4]};
+}
+
 function spawnBoss(lv){
   const def=BOSSES[lv];
   const hp=Math.round(def.hp*DIFF[currentDiff].bossHpMult);
@@ -945,13 +988,14 @@ function levelDone(){
   if(phase!=='playing')return;
   phase='levelComplete';SFX.level();
   const tb=Math.floor((GS.timer/1000)*10);GS.score+=tb;
-  const nextBoss=BOSS_LEVELS.has(GS.level+1);
-  showLC(`LEVEL ${GS.level} CLEAR!`,[{l:'Meteors Destroyed',v:GS.destroyed},{l:'Time Bonus',v:`+${tb}`},{l:'Total Score',v:GS.score}],nextBoss);
+  const nextBoss=endlessMode&&((endlessWave+1)%5===0);
+  const title=endlessMode?`WAVE ${endlessWave} CLEAR!`:`LEVEL ${GS.level} CLEAR!`;
+  showLC(title,[{l:'Meteors Destroyed',v:GS.destroyed},{l:'Time Bonus',v:`+${tb}`},{l:'Total Score',v:GS.score}],nextBoss);
 }
 function bossDone(){
   if(phase!=='bossActive')return;
   phase='levelComplete';setBossBar(false);
-  const nextBoss=BOSS_LEVELS.has(GS.level+1);
+  const nextBoss=endlessMode&&((endlessWave+1)%5===0);
   showLC('BOSS DEFEATED!',[{l:'Boss Bonus',v:'+1000'},{l:'Total Score',v:GS.score}],nextBoss);
   if(!nextBoss) Music.play('game');
 }
@@ -964,9 +1008,7 @@ function showLC(title,stats,nextBoss){
     hideOv('levelComplete');
     document.removeEventListener('keydown',spKey);
     document.getElementById('continueBtn').removeEventListener('click',go);
-    // Show support screen before advancing (skip on final level)
-    if(GS.level<MAX_LEVELS) showSupportScreen();
-    else advLevel();
+    showSupportScreen();
   };
   const spKey=e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();go();}};
   document.addEventListener('keydown',spKey);
@@ -1021,6 +1063,13 @@ window.pickSupport=function(i){
 };
 
 function advLevel(){
+  if(endlessMode){
+    endlessWave++;
+    GS.level=endlessWave;
+    setupLevel();
+    if(phase==='playing'){showScreen('game');announce(`WAVE ${endlessWave}`);}
+    return;
+  }
   GS.level++;
   if(GS.level>MAX_LEVELS){triggerVictory();return;}
   setupLevel();
@@ -1188,8 +1237,18 @@ function triggerGameOver(){
   phase='gameOver';Music.play('gameover');
   cancelAnimationFrame(animId);animId=0;
   document.getElementById('goScore').textContent=GS.score;
-  document.getElementById('goLevel').textContent=GS.level;
-  if(!DEV.used&&qualifies(GS.score))showNameEntry(GS.score,GS.level,()=>showScreen('gameOver'));
+  const lvRow=document.getElementById('goLevelRow');
+  const endRow=document.getElementById('goEndlessRow');
+  if(endlessMode){
+    if(lvRow)lvRow.classList.add('hidden');
+    if(endRow){endRow.classList.remove('hidden');document.getElementById('goEndlessWave').textContent=endlessWave;}
+  }else{
+    if(lvRow)lvRow.classList.remove('hidden');
+    if(endRow)endRow.classList.add('hidden');
+    document.getElementById('goLevel').textContent=GS.level;
+  }
+  const lvForLB=endlessMode?endlessWave:GS.level;
+  if(!DEV.used&&qualifies(GS.score))showNameEntry(GS.score,lvForLB,()=>showScreen('gameOver'));
   else{if(DEV.used)announce('DEV RUN — score not saved',2400);showScreen('gameOver');}
 }
 function triggerVictory(){
@@ -1226,7 +1285,7 @@ async function renderLB(){
   if(lbDiffFilter!=='all') all=all.filter(e=>(e.diff||'normal')===lbDiffFilter);
   if(!all.length){el.innerHTML='<div class="lb-empty">'+(lbFilter==='mine'?'No scores found for your pilot name.':'No scores yet. Be the first!')+'</div>';return;}
   const onlineNote=ONLINE_BOARD?'<div class="lb-online-note">🌐 Global Leaderboard</div>':'<div class="lb-online-note local">💾 Local Scores Only</div>';
-  const diffBadge=d=>d?`<span class="lb-diff-badge ${d||'normal'}">${(d||'NRM').toUpperCase().slice(0,3)}</span>`:'';
+  const diffBadge=d=>d?`<span class="lb-diff-badge ${d||'normal'}">${d==='endless'?'∞':( d||'NRM').toUpperCase().slice(0,3)}</span>`:''; 
   el.innerHTML=onlineNote+all.map((e,i)=>`
     <div class="lb-row ${['gold','silver','bronze'][i]||''}">
       <span class="lb-rank">${['🥇','🥈','🥉'][i]||'#'+(i+1)}</span>
@@ -1264,7 +1323,8 @@ function updateHUD(){
   const devWarn=document.getElementById('devWarnHUD');
   if(devWarn) devWarn.style.display=DEV.used?'block':'none';
   document.getElementById('scoreDisplay').textContent=GS.score.toLocaleString();
-  document.getElementById('levelDisplay').textContent=`${GS.level} / ${MAX_LEVELS}`;
+  document.getElementById('levelDisplay').textContent=endlessMode?`WAVE ${endlessWave} ∞`:`${GS.level} / ${MAX_LEVELS}`;
+  const lvEl=document.getElementById('levelDisplay');if(lvEl)lvEl.className=endlessMode?'hv endless-hud':'hv';
   document.getElementById('livesDisplay').textContent='♥'.repeat(Math.max(0,GS.lives));
   const secs=Math.max(0,Math.ceil(GS.timer/1000)),m=Math.floor(secs/60),s=secs%60;
   const tEl=document.getElementById('timerDisplay');
@@ -1470,8 +1530,9 @@ function startFresh(){
   lastTs=0;animId=requestAnimationFrame(gameLoop);
 }
 
-document.getElementById('startBtn').onclick=startFresh;
-document.getElementById('restartBtn').onclick=startFresh;
+document.getElementById('startBtn').onclick=()=>{endlessMode=false;startFresh();};
+document.getElementById('endlessBtn').onclick=()=>{endlessMode=true;startFresh();};
+document.getElementById('restartBtn').onclick=()=>{endlessMode=false;startFresh();};
 document.getElementById('lbBtn').onclick=async()=>{phase='leaderboard';showScreen('leaderboard');await renderLB();};
 document.getElementById('settingsBtn').onclick=()=>{prevPhase='start';phase='settings';showScreen('settings');};
 document.getElementById('lbBackBtn').onclick=()=>{phase='start';showScreen('start');};

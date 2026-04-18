@@ -25,6 +25,8 @@
         </div>
       </div>
       <button class="btn-primary" id="startBtn">LAUNCH MISSION</button>
+      <button class="btn-secondary endless-btn" id="endlessBtn">∞ ENDLESS MODE</button>
+      <button class="btn-secondary boss-creator-btn hidden" id="bossCreatorBtn">☠ BOSS CREATOR</button>
       <button class="btn-secondary" id="lbBtn">🏆 LEADERBOARD</button>
       <button class="btn-secondary" id="settingsBtn">⚙ SETTINGS</button>
     </div>
@@ -53,6 +55,7 @@
         <button class="lb-filter"        id="lbDiffEasy" onclick="setLBDiff('easy')">EASY</button>
         <button class="lb-filter"        id="lbDiffNorm" onclick="setLBDiff('normal')">NORMAL</button>
         <button class="lb-filter"        id="lbDiffHard" onclick="setLBDiff('hard')">HARD</button>
+        <button class="lb-filter"        id="lbDiffEnd"  onclick="setLBDiff('endless')">∞ ENDLESS</button>
       </div>
     </div>
     <div id="lbList" class="lb-list"></div>
@@ -254,6 +257,7 @@
     <div id="devLog" class="dev-log"></div>
   </div>
 </div>
+
 
 <script src="script.js"></script>
 </body>
