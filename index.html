@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+v<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -137,6 +137,11 @@
   <div id="upgradeBar"></div>
   <canvas id="gameCanvas"></canvas>
   <div id="announceEl"></div>
+  <div id="eventBanner" class="event-banner hidden">
+    <div class="eb-label">★ SPECIAL EVENT ★</div>
+    <div class="eb-name"></div>
+    <div class="eb-desc"></div>
+  </div>
 </div>
 
 <!-- ═══ OVERLAYS ═══ -->
@@ -191,8 +196,10 @@
       <button class="icon-btn" onclick="hideOv('dev')" style="margin-left:auto">✕</button>
     </div>
     <div class="dev-tabs">
-      <button class="dev-tab active" id="dtGame"   onclick="devTab('game')">GAME</button>
-      <button class="dev-tab"        id="dtLB"     onclick="devTab('lb')">LEADERBOARD</button>
+      <button class="dev-tab active" id="dtGame"    onclick="devTab('game')">GAME</button>
+      <button class="dev-tab"        id="dtEndless" onclick="devTab('endless')">ENDLESS</button>
+      <button class="dev-tab"        id="dtBosses"  onclick="devTab('bosses')">BOSSES</button>
+      <button class="dev-tab"        id="dtLB"      onclick="devTab('lb')">LEADERBOARD</button>
     </div>
 
     <!-- GAME PANEL -->
@@ -203,6 +210,8 @@
           <div class="dev-row"><span>God Mode</span><button class="toggle" id="godToggle" onclick="devToggle('god')">OFF</button></div>
           <div class="dev-row"><span>Invincible</span><button class="toggle" id="invToggle" onclick="devToggle('inv')">OFF</button></div>
           <div class="dev-row"><span>One-Hit Kill</span><button class="toggle" id="ohkToggle" onclick="devToggle('ohk')">OFF</button></div>
+          <div class="dev-row"><span>Show Hitboxes</span><button class="toggle off" id="hbToggle" onclick="devToggle('hitbox')">OFF</button></div>
+          <div class="dev-row"><span>Slow Motion</span><button class="toggle off" id="slowToggle" onclick="devToggle('slowmo')">OFF</button></div>
         </div>
         <div class="dev-section">
           <div class="dev-section-title">LEVEL CONTROL</div>
@@ -214,22 +223,147 @@
             </div>
           </div>
           <div class="dev-row"><span>Skip Level</span><button class="dev-action-btn" onclick="devSkipLevel()">SKIP →</button></div>
+          <div class="dev-row"><span>Set Timer</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input type="number" id="devTimerInput" class="dev-input" min="5" max="140" value="30" style="width:46px"/>
+              <button class="dev-action-btn" onclick="devSetTimer()">SET</button>
+            </div>
+          </div>
           <div class="dev-row"><span>Kill All Meteors</span><button class="dev-action-btn" onclick="devKillAll()">CLEAR</button></div>
           <div class="dev-row"><span>Kill Boss</span><button class="dev-action-btn" onclick="devKillBoss()">KILL</button></div>
+          <div class="dev-row"><span>Set Difficulty</span>
+            <select id="devDiffSel" class="dev-input" onchange="devSetDiff()" style="width:90px">
+              <option value="easy">Easy</option>
+              <option value="normal" selected>Normal</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
         </div>
         <div class="dev-section">
           <div class="dev-section-title">RESOURCES</div>
           <div class="dev-row"><span>Add Life</span><button class="dev-action-btn" onclick="devAddLife()">+1 ♥</button></div>
-          <div class="dev-row"><span>Add Score</span><button class="dev-action-btn" onclick="devAddScore()">+5000</button></div>
+          <div class="dev-row"><span>Remove Life</span><button class="dev-action-btn danger" onclick="devRemoveLife()">−1 ♥</button></div>
+          <div class="dev-row"><span>Add Score</span>
+            <div style="display:flex;gap:5px;align-items:center">
+              <input type="number" id="devScoreAmt" class="dev-input" value="5000" style="width:62px"/>
+              <button class="dev-action-btn" onclick="devAddScore()">ADD</button>
+            </div>
+          </div>
+          <div class="dev-row"><span>Set Score</span>
+            <div style="display:flex;gap:5px;align-items:center">
+              <input type="number" id="devSetScoreAmt" class="dev-input" value="0" style="width:62px"/>
+              <button class="dev-action-btn" onclick="devSetScore()">SET</button>
+            </div>
+          </div>
           <div class="dev-row"><span>All Power-ups</span><button class="dev-action-btn" onclick="devAllPU()">GRANT</button></div>
+          <div class="dev-row"><span>Clear Power-ups</span><button class="dev-action-btn danger" onclick="devClearPU()">CLEAR</button></div>
           <div class="dev-row"><span>All Upgrades</span><button class="dev-action-btn" onclick="devAllUpgrades()">GRANT</button></div>
+          <div class="dev-row"><span>Reset Upgrades</span><button class="dev-action-btn danger" onclick="devResetUpgrades()">RESET</button></div>
         </div>
         <div class="dev-section">
           <div class="dev-section-title">SPAWN</div>
-          <div class="dev-row"><span>Spawn Meteor</span><button class="dev-action-btn" onclick="devSpawnMeteor()">SPAWN</button></div>
-          <div class="dev-row"><span>Spawn Power-up</span><button class="dev-action-btn" onclick="devSpawnPU()">SPAWN</button></div>
-          <div class="dev-row"><span>Add Companion</span><button class="dev-action-btn" onclick="devAddComp()">ADD 🛸</button></div>
+          <div class="dev-row"><span>Meteors</span>
+            <div style="display:flex;gap:5px">
+              <button class="dev-action-btn" onclick="devSpawnMeteor()">×5 NORMAL</button>
+              <button class="dev-action-btn" onclick="devSpawnGolden()">✦ GOLDEN</button>
+            </div>
+          </div>
+          <div class="dev-row"><span>Spawn Power-up</span>
+            <select id="devPUType" class="dev-input" style="width:75px">
+              <option value="">Random</option>
+              <option value="rapid">Rapid</option>
+              <option value="triple">Triple</option>
+              <option value="shield">Shield</option>
+              <option value="bomb">Bomb</option>
+            </select>
+            <button class="dev-action-btn" onclick="devSpawnPU()">SPAWN</button>
+          </div>
+          <div class="dev-row"><span>Companion</span><button class="dev-action-btn" onclick="devAddComp()">ADD 🛸</button></div>
+          <div class="dev-row"><span>Remove Companions</span><button class="dev-action-btn danger" onclick="devClearComps()">CLEAR</button></div>
+          <div class="dev-row"><span>Fire Missiles</span><button class="dev-action-btn" onclick="devFireMissiles()">🚀 FIRE</button></div>
           <div class="dev-row"><span>Trigger Boss</span><button class="dev-action-btn" onclick="devTriggerBoss()">BOSS ⚠</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ENDLESS PANEL -->
+    <div id="devPanelEndless" class="dev-panel hidden">
+      <div class="dev-grid">
+        <div class="dev-section">
+          <div class="dev-section-title">WAVE CONTROL</div>
+          <div class="dev-row">
+            <span>Jump to Wave</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input type="number" id="devWaveInput" class="dev-input" min="1" max="999" value="1"/>
+              <button class="dev-action-btn" onclick="devJumpWave()">GO</button>
+            </div>
+          </div>
+          <div class="dev-row"><span>Skip Wave</span><button class="dev-action-btn" onclick="devSkipLevel()">SKIP →</button></div>
+          <div class="dev-row"><span>Current Wave</span><span id="devWaveDisplay" style="font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--cyan)">—</span></div>
+          <div class="dev-row"><span>Boss Kills</span>
+            <div style="display:flex;gap:5px;align-items:center">
+              <input type="number" id="devBossKillsInput" class="dev-input" min="0" value="0" style="width:52px"/>
+              <button class="dev-action-btn" onclick="devSetBossKills()">SET</button>
+            </div>
+          </div>
+          <div class="dev-row"><span>Unlock Creator Now</span><button class="dev-action-btn" onclick="devUnlockCreator()">UNLOCK</button></div>
+        </div>
+        <div class="dev-section">
+          <div class="dev-section-title">EVENTS</div>
+          <div class="dev-row"><span>Disable Events</span><button class="toggle off" id="noEventsToggle" onclick="devToggle('noEvents')">OFF</button></div>
+          <div class="dev-row"><span>Fire Now</span><button class="dev-action-btn" onclick="devFireEvent()">RANDOM EVENT</button></div>
+          <div class="dev-row"><span>Specific Event</span>
+            <div style="display:flex;gap:5px;align-items:center">
+              <select id="devEventSel" class="dev-input" style="width:100px"></select>
+              <button class="dev-action-btn" onclick="devFireSpecificEvent()">FIRE</button>
+            </div>
+          </div>
+          <div class="dev-row"><span>Speed Up Timer</span><button class="dev-action-btn" onclick="devSpeedEvent()">→ 3s</button></div>
+          <div class="dev-row"><span>Clear All Events</span><button class="dev-action-btn danger" onclick="devClearEvents()">CLEAR</button></div>
+          <div class="dev-row"><span>Golden Meteor</span><button class="dev-action-btn" onclick="devSpawnGolden()">✦ SPAWN</button></div>
+          <div class="dev-row"><span>Freeze All</span><button class="dev-action-btn" onclick="devFreezeAll()">❄ FREEZE</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOSSES PANEL -->
+    <div id="devPanelBosses" class="dev-panel hidden">
+      <div class="dev-grid">
+        <div class="dev-section">
+          <div class="dev-section-title">CUSTOM BOSSES</div>
+          <div class="dev-row"><span>Total Saved</span><span id="devCustomBossCount" style="font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--cyan)">0</span></div>
+          <div class="dev-row"><span>Spawn Custom</span>
+            <div style="display:flex;gap:5px;align-items:center">
+              <select id="devCustomBossSel" class="dev-input" style="width:100px"></select>
+              <button class="dev-action-btn" onclick="devSpawnCustomBoss()">SPAWN</button>
+            </div>
+          </div>
+          <div class="dev-row"><span>Delete Custom</span>
+            <div style="display:flex;gap:5px;align-items:center">
+              <select id="devCustomBossDelSel" class="dev-input" style="width:100px"></select>
+              <button class="dev-action-btn danger" onclick="devDeleteCustomBoss()">DELETE</button>
+            </div>
+          </div>
+          <div class="dev-row"><span>Clear All Custom</span><button class="dev-action-btn danger" onclick="devClearCustomBosses()">CLEAR ALL</button></div>
+        </div>
+        <div class="dev-section">
+          <div class="dev-section-title">PRESET BOSSES</div>
+          <div class="dev-row"><span>Spawn Level 5</span><button class="dev-action-btn" onclick="devSpawnPresetBoss(5)">GRANITE GUARDIAN</button></div>
+          <div class="dev-row"><span>Spawn Level 10</span><button class="dev-action-btn" onclick="devSpawnPresetBoss(10)">IRON STORM</button></div>
+          <div class="dev-row"><span>Spawn Level 15</span><button class="dev-action-btn" onclick="devSpawnPresetBoss(15)">VOID CRUSHER</button></div>
+          <div class="dev-row"><span>Spawn Level 20</span><button class="dev-action-btn" onclick="devSpawnPresetBoss(20)">⚡ ICSPARK</button></div>
+          <div class="dev-row"><span>Boss HP %</span>
+            <div style="display:flex;gap:5px;align-items:center">
+              <input type="number" id="devBossHPInput" class="dev-input" min="1" max="100" value="50" style="width:52px"/>
+              <button class="dev-action-btn" onclick="devSetBossHP()">SET %</button>
+            </div>
+          </div>
+          <div class="dev-row"><span>Boss Speed ×</span>
+            <div style="display:flex;gap:5px;align-items:center">
+              <input type="number" id="devBossSpdInput" class="dev-input" min="1" max="5" value="2" step="0.5" style="width:52px"/>
+              <button class="dev-action-btn" onclick="devSetBossSpd()">MULT</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -258,6 +392,71 @@
   </div>
 </div>
 
+
+
+<!-- ═══ BOSS CREATOR ═══ -->
+<div id="bossCreatorScreen" class="screen hidden">
+  <div class="star-canvas"></div>
+  <div class="sc bc-sc">
+    <div class="bc-header">
+      <div class="title-eyebrow">☠ BOSS CREATOR — ENDLESS ONLY ☠</div>
+      <h2 class="game-title" style="font-size:clamp(1.8rem,5vw,3rem)">BUILD YOUR BOSS</h2>
+    </div>
+    <div class="bc-layout">
+      <!-- Controls -->
+      <div class="bc-controls">
+        <div class="bc-section">
+          <div class="bc-label">IDENTITY</div>
+          <div class="bc-field"><label>Name</label><input type="text" id="bcName" class="dev-input bc-text-input" maxlength="18" placeholder="THE DESTROYER" oninput="bcPreview()"/></div>
+          <div class="bc-field"><label>Tagline</label><input type="text" id="bcTagline" class="dev-input bc-text-input" maxlength="28" placeholder="Forged in darkness" oninput="bcPreview()"/></div>
+        </div>
+        <div class="bc-section">
+          <div class="bc-label">APPEARANCE</div>
+          <div class="bc-field"><label>Color</label>
+            <div class="bc-palette" id="bcPalette"></div>
+          </div>
+          <div class="bc-field"><label>Size <span class="bc-val" id="bcSzVal">70</span></label>
+            <input type="range" id="bcSz" min="45" max="105" value="70" class="vol-slider" style="flex:1" oninput="bcPreview()"/></div>
+        </div>
+        <div class="bc-section">
+          <div class="bc-label">COMBAT</div>
+          <div class="bc-field"><label>HP <span class="bc-val" id="bcHpVal">60</span></label>
+            <input type="range" id="bcHp" min="20" max="120" value="60" class="vol-slider" style="flex:1" oninput="bcPreview()"/></div>
+          <div class="bc-field"><label>Speed <span class="bc-val" id="bcSpdVal">2.0</span></label>
+            <input type="range" id="bcSpd" min="8" max="38" value="20" class="vol-slider" style="flex:1" oninput="bcPreview()"/></div>
+          <div class="bc-field"><label>Attack Rate <span class="bc-val" id="bcAtkVal">2.0s</span></label>
+            <input type="range" id="bcAtk" min="6" max="35" value="20" class="vol-slider" style="flex:1" oninput="bcPreview()"/></div>
+          <div class="bc-field"><label>Shots <span class="bc-val" id="bcShotsVal">3</span></label>
+            <input type="range" id="bcShots" min="1" max="8" value="3" class="vol-slider" style="flex:1" oninput="bcPreview()"/></div>
+          <div class="bc-field"><label>Shot Speed <span class="bc-val" id="bcSSpdVal">4.0</span></label>
+            <input type="range" id="bcSSpd" min="15" max="60" value="40" class="vol-slider" style="flex:1" oninput="bcPreview()"/></div>
+          <div class="bc-field"><label>Pattern</label>
+            <div class="bc-pat-row" id="bcPats">
+              <button class="bc-pat active" data-pat="aimed"  onclick="bcPat(this)">🎯 Aimed</button>
+              <button class="bc-pat"        data-pat="spread" onclick="bcPat(this)">📡 Spread</button>
+              <button class="bc-pat"        data-pat="spiral" onclick="bcPat(this)">🌀 Spiral</button>
+              <button class="bc-pat"        data-pat="chaos"  onclick="bcPat(this)">💥 Chaos</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Preview -->
+      <div class="bc-preview-col">
+        <canvas id="bcCanvas" width="260" height="220" class="bc-canvas"></canvas>
+        <div class="bc-meter">
+          <div class="bc-meter-label">DIFFICULTY RATING</div>
+          <div class="bc-meter-track"><div id="bcMeterFill" class="bc-meter-fill"></div></div>
+          <div id="bcMeterScore" class="bc-meter-score">—</div>
+        </div>
+        <div id="bcSavedList" class="bc-saved-list"></div>
+        <div style="display:flex;gap:8px;width:100%">
+          <button class="btn-primary" style="flex:1" onclick="bcSave()">SAVE BOSS</button>
+          <button class="btn-secondary" id="bossCreatorBackBtn" style="flex:1">← BACK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="script.js"></script>
 </body>
