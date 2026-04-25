@@ -664,7 +664,20 @@ function showBossIntro(lv){
   const fill=document.getElementById('biFill');
   fill.style.animation='none';void fill.offsetWidth;fill.style.animation='biLoad 2.8s linear forwards';
   showScreen('game');showOv('bossIntro');
-  setTimeout(()=>{hideOv('bossIntro');spawnBoss(lv);phase='bossActive';setBossBar(true);updateHUD();},3100);
+
+  const sceneId=getCampaignBossScene(lv);
+  const afterScene=()=>{
+    hideOv('bossIntro');spawnBoss(lv);phase='bossActive';setBossBar(true);updateHUD();
+  };
+  if(sceneId){
+    // Play cutscene over boss intro overlay
+    setTimeout(()=>{
+      hideOv('bossIntro');
+      playCutscene(sceneId, afterScene);
+    }, 600);
+  } else {
+    setTimeout(afterScene, 3100);
+  }
 }
 
 // ── Endless Boss Intro (cycles through bosses, scales HP) ─
@@ -1104,8 +1117,18 @@ function advLevel(){
   if(endlessMode){
     endlessWave++;
     GS.level=endlessWave;
-    setupLevel();
-    if(phase==='playing'){showScreen('game');announce(`WAVE ${endlessWave}`);}
+    // Endless milestones
+    const milestones={10:'endless_wave10',25:'endless_wave25',50:'endless_wave50'};
+    const mScene=milestones[endlessWave];
+    if(mScene){
+      playCutscene(mScene, ()=>{
+        setupLevel();
+        if(phase==='playing'){showScreen('game');announce(`WAVE ${endlessWave}`);}
+      });
+    } else {
+      setupLevel();
+      if(phase==='playing'){showScreen('game');announce(`WAVE ${endlessWave}`);}
+    }
     return;
   }
   GS.level++;
@@ -1294,8 +1317,10 @@ function triggerVictory(){
   cancelAnimationFrame(animId);animId=0;
   document.getElementById('vicScore').textContent=GS.score;
   if(settings.flash)doFlash('#ffd60055');
-  if(!DEV.used)showNameEntry(GS.score,MAX_LEVELS,()=>showScreen('victory'));
-  else{announce('DEV RUN — score not saved',2400);setTimeout(()=>showScreen('victory'),800);}
+  playCutscene('victory_scene', ()=>{
+    if(!DEV.used)showNameEntry(GS.score,MAX_LEVELS,()=>showScreen('victory'));
+    else{announce('DEV RUN — score not saved',2400);setTimeout(()=>showScreen('victory'),800);}
+  });
 }
 function showNameEntry(score,level,cb){
   document.getElementById('entryScore').textContent=score;
@@ -1671,9 +1696,18 @@ function startFresh(){
   Music.resume();getAC();
   cancelAnimationFrame(animId);animId=0;
   DEV.used=false;DEV.god=false;DEV.inv=false;DEV.ohk=false;
-  initGame();showScreen('game');announce('LEVEL 1');
-  updateUpgradeBar();
-  lastTs=0;animId=requestAnimationFrame(gameLoop);
+
+  if(endlessMode){
+    initGame();showScreen('game');announce('WAVE 1');
+    updateUpgradeBar();lastTs=0;animId=requestAnimationFrame(gameLoop);
+    playCutscene('endless_start', null);
+  } else {
+    // Play intro cutscene then start
+    playCutscene('intro', ()=>{
+      initGame();showScreen('game');announce('LEVEL 1');
+      updateUpgradeBar();lastTs=0;animId=requestAnimationFrame(gameLoop);
+    });
+  }
 }
 
 document.getElementById('startBtn').onclick=()=>{endlessMode=false;startFresh();};
@@ -2728,8 +2762,541 @@ function drawHitboxes(){
   ctx.restore();
 }
 
+// ═══════════════════════════════════════════════════════════
+//   CUTSCENE ENGINE
+// ═══════════════════════════════════════════════════════════
+
+const CC = document.getElementById('cutsceneCanvas');
+const CCX = CC ? CC.getContext('2d') : null;
+let cutsceneActive = false;
+let cutsceneSkipped = false;
+let seenCutscenes = {};
+
+function loadSeenCutscenes(){
+  try{ const s=localStorage.getItem('mb_cutscenes'); if(s) seenCutscenes=JSON.parse(s); }catch(e){}
+}
+function markSeen(id){ seenCutscenes[id]=true; try{localStorage.setItem('mb_cutscenes',JSON.stringify(seenCutscenes));}catch(e){} }
+function hasSeen(id){ return !!seenCutscenes[id]; }
+function resetSeen(){ seenCutscenes={}; try{localStorage.removeItem('mb_cutscenes');}catch(e){} }
+
+// ── Panel Types ───────────────────────────────────────────
+// Each scene is an array of panels. Each panel:
+// { type, duration, ...props }
+// Types: 'title', 'text', 'dialogue', 'ship', 'boss_reveal', 'earth', 'transmission', 'blackout'
+
+// ── Scene Definitions ─────────────────────────────────────
+const CUTSCENES = {
+
+  // ── CAMPAIGN INTRO (before level 1) ──────────────────────
+  intro: {
+    id: 'intro',
+    music: null, // keep menu music fading
+    panels: [
+      { type:'blackout',   dur:600,  text:'', color:'#000' },
+      { type:'earth',      dur:2400, text:'EARTH ORBIT\nYear 2157', sub:'Meteor clusters detected — Class Omega' },
+      { type:'text',       dur:2800, lines:[
+          { t:'GROUND CONTROL', col:'#00f5ff', size:1.1 },
+          { t:'"All pilots to stations."', col:'#e8f0ff', size:0.85 },
+          { t:'"This is not a drill."', col:'#e8f0ff', size:0.85 },
+        ]
+      },
+      { type:'transmission', dur:2600, from:'COMMAND', msg:'One ship. One pilot.\nLast line of defence.', col:'#ffd600' },
+      { type:'ship',       dur:2200, text:'YOUR MISSION', sub:'Protect Earth. Destroy every last one.' },
+      { type:'blackout',   dur:500,  text:'', color:'#000' },
+    ]
+  },
+
+  // ── BOSS 1 INTRO (level 5) ───────────────────────────────
+  boss1_approach: {
+    id: 'boss1_approach',
+    panels: [
+      { type:'transmission', dur:2000, from:'RADAR', msg:'Large mass incoming.\nUnlike anything we\'ve seen.', col:'#ff6a00' },
+      { type:'boss_reveal',  dur:3000, bossLv:5,  text:'GRANITE GUARDIAN', sub:'The Ancient Destroyer', col:'#ff6a00' },
+      { type:'blackout',     dur:400,  text:'' },
+    ]
+  },
+
+  // ── BOSS 2 INTRO (level 10) ──────────────────────────────
+  boss2_approach: {
+    id: 'boss2_approach',
+    panels: [
+      { type:'transmission', dur:1800, from:'COMMAND', msg:'You\'re halfway there, pilot.\nDon\'t celebrate yet.', col:'#ffd600' },
+      { type:'transmission', dur:2000, from:'RADAR',   msg:'Second anomaly detected.\nFaster. More aggressive.', col:'#ff6a00' },
+      { type:'boss_reveal',  dur:3000, bossLv:10, text:'IRON STORM', sub:'Forged in Chaos', col:'#00c8ff' },
+      { type:'blackout',     dur:400,  text:'' },
+    ]
+  },
+
+  // ── BOSS 3 INTRO (level 15) ──────────────────────────────
+  boss3_approach: {
+    id: 'boss3_approach',
+    panels: [
+      { type:'text', dur:2200, lines:[
+          { t:'CRITICAL ALERT', col:'#ff2d55', size:1.3 },
+          { t:'Atmosphere breached.', col:'#e8f0ff', size:0.85 },
+          { t:'Third entity incoming.', col:'#e8f0ff', size:0.85 },
+        ]
+      },
+      { type:'transmission', dur:2000, from:'COMMAND', msg:'Your ship is holding together.\nWe don\'t know how.\nKeep going.', col:'#ffd600' },
+      { type:'boss_reveal',  dur:3000, bossLv:15, text:'VOID CRUSHER', sub:'Devourer of Stars', col:'#c800ff' },
+      { type:'blackout',     dur:400,  text:'' },
+    ]
+  },
+
+  // ── ICSPARK INTRO (level 20) ─────────────────────────────
+  icspark_approach: {
+    id: 'icspark_approach',
+    panels: [
+      { type:'blackout',     dur:800,  text:'' },
+      { type:'transmission', dur:2400, from:'UNKNOWN', msg:'You\'ve been fighting my meteors\nthis whole time, pilot.', col:'#00f5ff', glitch:true },
+      { type:'transmission', dur:2200, from:'UNKNOWN', msg:'Did you think they were accidents?', col:'#00f5ff', glitch:true },
+      { type:'text',         dur:2000, lines:[
+          { t:'I AM', col:'rgba(0,245,255,0.5)', size:0.9 },
+          { t:'ICSPARK', col:'#00f5ff', size:2.2, glow:true },
+          { t:'And this ends now.', col:'#e8f0ff', size:0.8 },
+        ]
+      },
+      { type:'boss_reveal',  dur:3200, bossLv:20, text:'ICSPARK', sub:'— The Final Spark —', col:'#00f5ff', icspark:true },
+      { type:'blackout',     dur:500,  text:'' },
+    ]
+  },
+
+  // ── VICTORY ──────────────────────────────────────────────
+  victory_scene: {
+    id: 'victory_scene',
+    panels: [
+      { type:'blackout',     dur:600,  text:'' },
+      { type:'earth',        dur:2600, text:'EARTH SAVED', sub:'The skies are clear.', peaceful:true },
+      { type:'transmission', dur:2400, from:'COMMAND', msg:'We... didn\'t think you\'d make it.\nHonestly.', col:'#ffd600' },
+      { type:'transmission', dur:2200, from:'COMMAND', msg:'Earth owes you everything, pilot.\nJob well done.', col:'#39ff14' },
+      { type:'ship',         dur:2400, text:'MISSION COMPLETE', sub:'The last defender returns home.', peaceful:true },
+      { type:'blackout',     dur:800,  text:'' },
+    ]
+  },
+
+  // ── ENDLESS FIRST WAVE ───────────────────────────────────
+  endless_start: {
+    id: 'endless_start',
+    panels: [
+      { type:'text', dur:1800, lines:[
+          { t:'ENDLESS MODE', col:'#c800ff', size:1.3 },
+          { t:'No finish line.', col:'#e8f0ff', size:0.85 },
+          { t:'Survive as long as you can.', col:'rgba(232,240,255,0.6)', size:0.75 },
+        ]
+      },
+      { type:'blackout', dur:400, text:'' },
+    ]
+  },
+
+  // ── ENDLESS WAVE 10 MILESTONE ────────────────────────────
+  endless_wave10: {
+    id: 'endless_wave10',
+    panels: [
+      { type:'transmission', dur:2000, from:'DEEP SPACE', msg:'Wave 10. Still breathing?\nThe void is impressed.', col:'#c800ff' },
+      { type:'blackout', dur:400, text:'' },
+    ]
+  },
+
+  // ── ENDLESS WAVE 25 MILESTONE ────────────────────────────
+  endless_wave25: {
+    id: 'endless_wave25',
+    panels: [
+      { type:'transmission', dur:2200, from:'ICSPARK', msg:'Wave 25, pilot.\nI\'m watching you.', col:'#00f5ff', glitch:true },
+      { type:'blackout', dur:400, text:'' },
+    ]
+  },
+
+  // ── ENDLESS WAVE 50 MILESTONE ────────────────────────────
+  endless_wave50: {
+    id: 'endless_wave50',
+    panels: [
+      { type:'text', dur:2000, lines:[
+          { t:'WAVE 50', col:'#ffd600', size:2, glow:true },
+          { t:'You are beyond legend.', col:'#e8f0ff', size:0.85 },
+        ]
+      },
+      { type:'transmission', dur:2000, from:'ICSPARK', msg:'Impossible.\nWhat ARE you?', col:'#00f5ff', glitch:true },
+      { type:'blackout', dur:400, text:'' },
+    ]
+  },
+
+};
+
+// ── Cutscene Runner ───────────────────────────────────────
+function playCutscene(id, onComplete, force=false){
+  const scene = CUTSCENES[id];
+  if(!scene){ onComplete?.(); return; }
+  if(hasSeen(id) && !force){ onComplete?.(); return; }
+  markSeen(id);
+
+  cutsceneActive = true;
+  cutsceneSkipped = false;
+
+  // Resize cutscene canvas
+  CC.width  = Math.min(window.innerWidth,  900);
+  CC.height = Math.min(window.innerHeight, 580);
+
+  const ov = document.getElementById('cutsceneOverlay');
+  ov.style.display = 'flex';
+  if(scene.music !== undefined && scene.music === null) Music.setVol(0.2);
+
+  // Skip button
+  const skipBtn = document.getElementById('cutsceneSkip');
+  const doSkip = () => { cutsceneSkipped = true; };
+  skipBtn.onclick = doSkip;
+
+  const escSkip = e => { if(e.key===' '||e.key==='Escape') doSkip(); };
+  document.addEventListener('keydown', escSkip);
+
+  let panelIdx = 0;
+
+  function nextPanel(){
+    if(cutsceneSkipped || panelIdx >= scene.panels.length){
+      finish();
+      return;
+    }
+    renderPanel(scene.panels[panelIdx], ()=>{
+      panelIdx++;
+      nextPanel();
+    });
+  }
+
+  function finish(){
+    ov.style.display = 'none';
+    cutsceneActive = false;
+    document.removeEventListener('keydown', escSkip);
+    Music.setVol(settings.music ? settings.musicVol : 0);
+    onComplete?.();
+  }
+
+  nextPanel();
+}
+
+// ── Panel Renderer ────────────────────────────────────────
+function renderPanel(panel, onDone){
+  if(!CCX){ onDone(); return; }
+
+  const W = CC.width, H = CC.height;
+  const dur = panel.dur || 2000;
+  let startT = null;
+  let typeIdx = 0;      // typewriter character index
+  let typeText = '';    // full text to type out
+  let raf;
+
+  // Collect full text for typewriter panels
+  if(panel.type === 'transmission') typeText = `[${panel.from}]\n${panel.msg}`;
+  if(panel.type === 'text') typeText = panel.lines?.map(l=>l.t).join('\n') || '';
+
+  function frame(ts){
+    if(cutsceneSkipped){ cancelAnimationFrame(raf); onDone(); return; }
+    if(!startT) startT = ts;
+    const elapsed = ts - startT;
+    const pct = Math.min(1, elapsed / dur);
+
+    // Clear
+    CCX.fillStyle = '#02020f';
+    CCX.fillRect(0, 0, W, H);
+
+    // Stars (slow parallax)
+    stars.forEach(s=>{
+      CCX.globalAlpha = s.a * 0.6;
+      CCX.fillStyle = '#fff';
+      CCX.beginPath(); CCX.arc(s.x * (W/canvas.width), s.y * (H/canvas.height), s.r, 0, Math.PI*2); CCX.fill();
+    });
+    CCX.globalAlpha = 1;
+
+    // Fade in / out envelope
+    const fadeIn  = Math.min(1, elapsed / 300);
+    const fadeOut = elapsed > dur - 300 ? Math.max(0, (dur - elapsed) / 300) : 1;
+    const alpha   = Math.min(fadeIn, fadeOut);
+    CCX.globalAlpha = alpha;
+
+    switch(panel.type){
+      case 'blackout':
+        CCX.globalAlpha = 1;
+        CCX.fillStyle = panel.color || '#000';
+        CCX.fillRect(0,0,W,H);
+        break;
+
+      case 'text':
+        drawTextPanel(panel, elapsed, alpha);
+        break;
+
+      case 'transmission':
+        drawTransmissionPanel(panel, elapsed, alpha);
+        break;
+
+      case 'earth':
+        drawEarthPanel(panel, elapsed, alpha);
+        break;
+
+      case 'ship':
+        drawShipPanel(panel, elapsed, alpha);
+        break;
+
+      case 'boss_reveal':
+        drawBossRevealPanel(panel, elapsed, alpha);
+        break;
+    }
+
+    CCX.globalAlpha = 1;
+
+    if(elapsed < dur){
+      raf = requestAnimationFrame(frame);
+    } else {
+      onDone();
+    }
+  }
+
+  raf = requestAnimationFrame(frame);
+}
+
+// ── Panel Draw Functions ──────────────────────────────────
+function ccText(text, x, y, size, color, glow, align='center'){
+  const fs = Math.round((CC.height * 0.06) * size);
+  CCX.font = `${size>1.2?'900':'700'} ${fs}px Orbitron, sans-serif`;
+  CCX.textAlign = align;
+  CCX.textBaseline = 'middle';
+  CCX.fillStyle = color;
+  if(glow){ CCX.shadowColor = color; CCX.shadowBlur = 24; }
+  CCX.fillText(text, x, y);
+  CCX.shadowBlur = 0;
+}
+
+function ccMono(text, x, y, size, color, align='center'){
+  const fs = Math.round((CC.height * 0.055) * size);
+  CCX.font = `${fs}px "Share Tech Mono", monospace`;
+  CCX.textAlign = align;
+  CCX.textBaseline = 'middle';
+  CCX.fillStyle = color;
+  CCX.fillText(text, x, y);
+}
+
+function drawTextPanel(panel, elapsed, alpha){
+  const W=CC.width, H=CC.height;
+  const lines = panel.lines || [];
+  const totalH = lines.length * H * 0.1;
+  let y = H/2 - totalH/2 + H*0.05;
+  lines.forEach((l,i)=>{
+    const lineAlpha = Math.min(1, Math.max(0, (elapsed - i*280) / 300));
+    CCX.globalAlpha = alpha * lineAlpha;
+    ccText(l.t, W/2, y, l.size||1, l.col||'#e8f0ff', l.glow);
+    y += H * 0.1 + H * 0.02 * (l.size||1);
+  });
+  CCX.globalAlpha = alpha;
+}
+
+function drawTransmissionPanel(panel, elapsed, alpha){
+  const W=CC.width, H=CC.height;
+  const col = panel.col || '#00f5ff';
+
+  // Scanline effect box
+  CCX.strokeStyle = col;
+  CCX.lineWidth = 1;
+  CCX.globalAlpha = alpha * 0.5;
+  CCX.strokeRect(W*0.08, H*0.2, W*0.84, H*0.6);
+  CCX.globalAlpha = alpha * 0.04;
+  CCX.fillStyle = col;
+  CCX.fillRect(W*0.08, H*0.2, W*0.84, H*0.6);
+  CCX.globalAlpha = alpha;
+
+  // Glitch offset on glitch panels
+  const gx = panel.glitch ? (Math.random()-.5)*3 : 0;
+
+  // From label
+  ccMono(`[ ${panel.from} ]`, W/2 + gx, H*0.32, 0.7, col);
+
+  // Separator line
+  CCX.globalAlpha = alpha * 0.4;
+  CCX.strokeStyle = col; CCX.lineWidth = 1;
+  CCX.beginPath(); CCX.moveTo(W*0.15, H*0.4); CCX.lineTo(W*0.85, H*0.4); CCX.stroke();
+  CCX.globalAlpha = alpha;
+
+  // Typewriter message — reveal chars over time
+  const msg = panel.msg || '';
+  const charsPerMs = msg.length / (panel.dur * 0.65);
+  const visibleChars = Math.min(msg.length, Math.floor(elapsed * charsPerMs));
+  const visibleMsg = msg.slice(0, visibleChars);
+
+  const msgLines = visibleMsg.split('\n');
+  let my = H * 0.5;
+  msgLines.forEach(line=>{
+    ccMono(line, W/2 + gx, my, 0.85, '#e8f0ff');
+    my += H * 0.09;
+  });
+
+  // Blinking cursor
+  if(visibleChars < msg.length && Math.floor(elapsed/250)%2===0){
+    ccMono('_', W/2, my - H*0.09, 0.85, col);
+  }
+
+  // Corner brackets (glitch panels)
+  if(panel.glitch){
+    CCX.globalAlpha = alpha * (0.4 + Math.random()*0.3);
+    CCX.strokeStyle = '#ff2d55'; CCX.lineWidth = 1;
+    [[W*0.08, H*0.2],[W*0.92-14, H*0.2],[W*0.08, H*0.8-14],[W*0.92-14, H*0.8-14]].forEach(([bx,by])=>{
+      CCX.strokeRect(bx, by, 14, 14);
+    });
+    CCX.globalAlpha = alpha;
+  }
+}
+
+function drawEarthPanel(panel, elapsed, alpha){
+  const W=CC.width, H=CC.height;
+  const r = Math.min(W,H) * 0.22;
+  const cx = W/2, cy = H * 0.46;
+  const peaceful = panel.peaceful;
+
+  // Glow
+  const grd = CCX.createRadialGradient(cx,cy,r*0.5,cx,cy,r*2);
+  grd.addColorStop(0, peaceful?'rgba(57,255,20,0.15)':'rgba(255,45,85,0.12)');
+  grd.addColorStop(1,'transparent');
+  CCX.fillStyle = grd; CCX.beginPath(); CCX.arc(cx,cy,r*2,0,Math.PI*2); CCX.fill();
+
+  // Earth circle
+  const eGrd = CCX.createRadialGradient(cx-r*0.3, cy-r*0.3, 0, cx, cy, r);
+  eGrd.addColorStop(0, peaceful?'#2a7a4a':'#1a4a8a');
+  eGrd.addColorStop(0.6, peaceful?'#1a5a3a':'#0a2a5a');
+  eGrd.addColorStop(1, '#050518');
+  CCX.fillStyle = eGrd;
+  CCX.beginPath(); CCX.arc(cx,cy,r,0,Math.PI*2); CCX.fill();
+
+  // Atmosphere ring
+  CCX.strokeStyle = peaceful?'rgba(57,255,20,0.5)':'rgba(0,245,255,0.4)';
+  CCX.lineWidth = 4;
+  CCX.beginPath(); CCX.arc(cx,cy,r+3,0,Math.PI*2); CCX.stroke();
+
+  // Orbit ring
+  CCX.strokeStyle = 'rgba(255,255,255,0.08)';
+  CCX.lineWidth = 1;
+  CCX.beginPath(); CCX.ellipse(cx,cy,r*1.5,r*0.4,0,0,Math.PI*2); CCX.stroke();
+
+  // Threat warning arc (non-peaceful)
+  if(!peaceful){
+    CCX.strokeStyle = `rgba(255,45,85,${0.4+Math.sin(elapsed/200)*0.4})`;
+    CCX.lineWidth = 3;
+    CCX.beginPath(); CCX.arc(cx,cy,r+14,Math.PI*1.2,Math.PI*1.8); CCX.stroke();
+  }
+
+  // Label
+  CCX.globalAlpha = alpha;
+  ccText(panel.text||'EARTH', W/2, H*0.76, 1.1, peaceful?'#39ff14':'#e8f0ff', peaceful);
+  if(panel.sub) ccMono(panel.sub, W/2, H*0.84, 0.72, 'rgba(232,240,255,0.6)');
+}
+
+function drawShipPanel(panel, elapsed, alpha){
+  const W=CC.width, H=CC.height;
+  const peaceful = panel.peaceful;
+  const sx = W/2, sy = H*0.42;
+
+  // Engine trail
+  const trailLen = peaceful ? 40 : 18;
+  const trailGrd = CCX.createLinearGradient(sx, sy-trailLen, sx, sy+trailLen);
+  trailGrd.addColorStop(0,'transparent');
+  trailGrd.addColorStop(0.5, peaceful?'rgba(57,255,20,0.3)':'rgba(255,165,0,0.4)');
+  trailGrd.addColorStop(1,'transparent');
+  CCX.fillStyle = trailGrd;
+  CCX.fillRect(sx-6, sy, 12, trailLen);
+
+  // Ship body
+  const sc = Math.min(W,H) * 0.0014;
+  CCX.save(); CCX.translate(sx, sy); CCX.scale(sc, sc);
+  CCX.shadowColor = peaceful?'#39ff14':'#00f5ff';
+  CCX.shadowBlur  = 30;
+  CCX.fillStyle   = peaceful?'#39ff14':'#00f5ff';
+  CCX.beginPath();
+  CCX.moveTo(0,-40); CCX.lineTo(28,20); CCX.lineTo(14,28);
+  CCX.lineTo(0,16); CCX.lineTo(-14,28); CCX.lineTo(-28,20);
+  CCX.closePath(); CCX.fill();
+  CCX.fillStyle='#001a2e';
+  CCX.beginPath(); CCX.ellipse(0,-8,8,12,0,0,Math.PI*2); CCX.fill();
+  CCX.restore();
+
+  // Stars streaking past (warp feel)
+  if(!peaceful){
+    CCX.strokeStyle='rgba(255,255,255,0.15)'; CCX.lineWidth=1;
+    for(let i=0;i<12;i++){
+      const bx=(i/12)*W, by=H*0.15+Math.sin(i*2.3)*H*0.5;
+      const len=20+Math.random()*40;
+      CCX.beginPath(); CCX.moveTo(bx,by); CCX.lineTo(bx+len,by); CCX.stroke();
+    }
+  }
+
+  ccText(panel.text||'', W/2, H*0.72, 1.1, peaceful?'#39ff14':'#e8f0ff', peaceful);
+  if(panel.sub) ccMono(panel.sub, W/2, H*0.81, 0.72, 'rgba(232,240,255,0.6)');
+}
+
+function drawBossRevealPanel(panel, elapsed, alpha){
+  const W=CC.width, H=CC.height;
+  const col  = panel.col || '#ff6a00';
+  const prog = Math.min(1, elapsed / (panel.dur * 0.55));
+  const sz   = Math.min(W,H) * 0.18 * prog;
+  const cx   = W/2, cy = H * 0.42;
+
+  // Danger ring
+  CCX.strokeStyle = `rgba(255,45,85,${0.3+Math.sin(elapsed/150)*0.3})`;
+  CCX.lineWidth = 2;
+  CCX.beginPath(); CCX.arc(cx,cy,sz+20+Math.sin(elapsed/100)*6,0,Math.PI*2); CCX.stroke();
+
+  // Boss silhouette — same rocky polygon as in-game
+  CCX.save(); CCX.translate(cx,cy);
+  CCX.shadowColor = col; CCX.shadowBlur = 30+Math.sin(elapsed/200)*10;
+  CCX.fillStyle = panel.icspark ? '#0a1a3a' : BOSSES[panel.bossLv]?.color || col;
+  CCX.beginPath();
+
+  if(panel.icspark){
+    // Hexagon for ICSpark
+    for(let i=0;i<6;i++){
+      const a=(i/6)*Math.PI*2-Math.PI/6;
+      i===0?CCX.moveTo(Math.cos(a)*sz,Math.sin(a)*sz):CCX.lineTo(Math.cos(a)*sz,Math.sin(a)*sz);
+    }
+  } else {
+    for(let i=0;i<10;i++){
+      const a=(i/10)*Math.PI*2, r=sz*(.85+((i*7+17)%10)/40);
+      i===0?CCX.moveTo(Math.cos(a)*r,Math.sin(a)*r):CCX.lineTo(Math.cos(a)*r,Math.sin(a)*r);
+    }
+  }
+  CCX.closePath(); CCX.fill();
+
+  // Core glow
+  const cr=sz*0.35+Math.sin(elapsed/200)*sz*0.06;
+  const cg=CCX.createRadialGradient(0,0,0,0,0,cr);
+  cg.addColorStop(0,'#fff'); cg.addColorStop(0.5,col); cg.addColorStop(1,'transparent');
+  CCX.fillStyle=cg; CCX.globalAlpha=0.8*prog;
+  CCX.beginPath(); CCX.arc(0,0,cr,0,Math.PI*2); CCX.fill();
+  CCX.globalAlpha=alpha;
+  CCX.restore();
+
+  // Name — types in
+  const charsIn = Math.floor(Math.max(0, (elapsed - panel.dur*0.35) / 60));
+  const visName = (panel.text||'').slice(0, charsIn);
+  CCX.globalAlpha = alpha * Math.min(1, Math.max(0,(elapsed-panel.dur*0.3)/300));
+  ccText(visName, W/2, H*0.72, 1.2, col, true);
+  if(panel.sub) ccMono(panel.sub, W/2, H*0.81, 0.72, 'rgba(232,240,255,0.6)');
+  CCX.globalAlpha = alpha;
+}
+
+// ── Cutscene Trigger Hooks ────────────────────────────────
+function getCampaignBossScene(lv){
+  const map={5:'boss1_approach',10:'boss2_approach',15:'boss3_approach',20:'icspark_approach'};
+  return map[lv]||null;
+}
+
+// ── Replay Viewer ─────────────────────────────────────────
+function showCutsceneReplay(){
+  const ids=Object.keys(CUTSCENES);
+  const choice=prompt(
+    'Choose a cutscene to replay:\n'+ids.map((id,i)=>`${i+1}. ${id}`).join('\n')+'\n\nEnter number:'
+  );
+  const idx=parseInt(choice)-1;
+  if(idx>=0&&idx<ids.length){
+    playCutscene(ids[idx], ()=>showScreen('settings'), true);
+  }
+}
+
 // ── Boot ─────────────────────────────────────────────
-loadPersist();loadBossData();resize();showScreen('start');checkCreatorUnlock();
+loadPersist();loadBossData();loadSeenCutscenes();resize();showScreen('start');checkCreatorUnlock();
+document.getElementById('replayCutscenesBtn')?.addEventListener('click', showCutsceneReplay);
 if(settings.music) setTimeout(()=>Music.play('menu'),300);
 requestAnimationFrame(()=>{
   ctx.fillStyle='#02020f';ctx.fillRect(0,0,canvas.width,canvas.height);
